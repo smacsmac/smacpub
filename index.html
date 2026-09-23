@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="fr" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Smacpub</title>
+  <meta name="description" content="Un lecteur EPUB simple, élégant et 100 % hors-ligne.">
+  <meta name="theme-color" content="#f7f5f1">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/app.css">
+  <script>
+    // Applique le thème avant l'affichage pour éviter un flash.
+    try {
+      var t = (JSON.parse(localStorage.getItem("smacpub:settings")) || {}).theme || "auto";
+      if (t === "auto") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  </script>
+</head>
+<body>
+  <!-- Icônes : Lucide (licence ISC, voir LICENSES/) -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <symbol id="i-back" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+    <symbol id="i-toc" viewBox="0 0 24 24"><path d="M3 5h.01"/><path d="M3 12h.01"/><path d="M3 19h.01"/><path d="M8 5h13"/><path d="M8 12h13"/><path d="M8 19h13"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><path d="m21 21-4.34-4.34"/><circle cx="11" cy="11" r="8"/></symbol>
+    <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="M17 3a2 2 0 0 1 2 2v15a1 1 0 0 1-1.496.868l-4.512-2.578a2 2 0 0 0-1.984 0l-4.512 2.578A1 1 0 0 1 5 20V5a2 2 0 0 1 2-2z"/></symbol>
+    <symbol id="i-type" viewBox="0 0 24 24"><path d="m15 16 2.536-7.328a1.02 1.02 1 0 1 1.928 0L22 16"/><path d="M15.697 14h5.606"/><path d="m2 16 4.039-9.69a.5.5 0 0 1 .923 0L11 16"/><path d="M3.304 13h6.392"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="M12 5v14"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M10 11v6"/><path d="M14 11v6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 3v12"/><path d="m17 8-5-5-5 5"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 15V3"/><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/></symbol>
+    <symbol id="i-book" viewBox="0 0 24 24"><path d="M12 5v16"/><path d="M20.001 19A2 2 0 0022 17V5a2 2 0 00-1.999-2L16 3.002A5 5 0 0012 5a5 5 0 00-4-2H4a2 2 0 00-2 2v12a2 2 0 001.999 2H8a5 5 0 014 2 5 5 0 014-2z"/></symbol>
+    <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></symbol>
+    <symbol id="i-restart" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+    <symbol id="i-logo" viewBox="0 0 512 512"><path d="M248 172c-40-30-92-40-140-36v220c48-4 100 6 140 36z"/><path d="M264 172c40-30 92-40 140-36v220c-48-4-100 6-140 36z" opacity=".78"/></symbol>
+  </svg>
+
+  <!-- ============ Bibliothèque ============ -->
+  <main id="library" class="library">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark"><svg><use href="#i-logo"/></svg></span>smacpub</div>
+      <div class="topbar-actions">
+        <label class="search-field">
+          <svg class="icon"><use href="#i-search"/></svg>
+          <input id="lib-search" type="search" placeholder="Titre, auteur…" autocomplete="off" aria-label="Rechercher dans la bibliothèque">
+        </label>
+        <button class="btn primary" id="add-btn" title="Ajouter des EPUB"><svg class="icon"><use href="#i-plus"/></svg><span>Ajouter</span></button>
+        <button class="icon-btn" id="settings-btn" title="Paramètres"><svg class="icon"><use href="#i-settings"/></svg></button>
+      </div>
+    </header>
+
+    <section class="welcome">
+      <h1 id="greeting">Bonjour</h1>
+      <p id="greeting-sub"></p>
+    </section>
+
+    <section id="hero" class="hero" hidden></section>
+
+    <section class="shelf" id="shelf">
+      <div class="shelf-head">
+        <h2>Bibliothèque <span id="book-count" class="count"></span></h2>
+        <div class="shelf-tools">
+          <div class="chips" id="filters" role="group" aria-label="Filtrer">
+            <button class="chip active" data-filter="all">Tous</button>
+            <button class="chip" data-filter="reading">En cours</button>
+            <button class="chip" data-filter="unread">À lire</button>
+            <button class="chip" data-filter="finished">Terminés</button>
+            <button class="chip" data-filter="favorite"><svg class="icon sm"><use href="#i-star"/></svg>Favoris</button>
+          </div>
+          <select id="sort" aria-label="Trier">
+            <option value="recent">Récemment lus</option>
+            <option value="added">Récemment ajoutés</option>
+            <option value="title">Titre</option>
+            <option value="author">Auteur</option>
+            <option value="progress">Progression</option>
+          </select>
+        </div>
+      </div>
+      <div id="grid" class="grid"></div>
+      <p id="no-match" class="no-match" hidden>Aucun livre ne correspond.</p>
+    </section>
+
+    <section id="empty" class="empty" hidden>
+      <div class="empty-art" aria-hidden="true"><svg><use href="#i-book"/></svg></div>
+      <h2>Votre bibliothèque est vide</h2>
+      <p>Ajoutez vos fichiers EPUB : ils restent sur cet appareil et se lisent sans connexion.</p>
+      <button class="btn primary lg" id="empty-add"><svg class="icon"><use href="#i-plus"/></svg>Ajouter des EPUB</button>
+      <p class="hint">ou glissez-déposez-les n'importe où dans cette fenêtre</p>
+    </section>
+  </main>
+
+  <!-- ============ Lecteur ============ -->
+  <div id="reader" class="reader" hidden>
+    <div id="r-stage" class="stage">
+      <button class="page-arrow prev" id="r-prev" tabindex="-1" aria-label="Page précédente"><svg class="icon"><use href="#i-left"/></svg></button>
+      <button class="page-arrow next" id="r-next" tabindex="-1" aria-label="Page suivante"><svg class="icon"><use href="#i-right"/></svg></button>
+      <div id="r-ribbon" class="ribbon" hidden><svg><use href="#i-bookmark"/></svg></div>
+      <div id="r-loading" class="loading" hidden><span></span></div>
+    </div>
+
+    <header class="reader-bar">
+      <button class="icon-btn" id="r-back" title="Bibliothèque (Échap)"><svg class="icon"><use href="#i-back"/></svg></button>
+      <div class="r-title">
+        <strong id="r-book-title"></strong>
+        <span id="r-chapter"></span>
+      </div>
+      <div class="r-actions">
+        <button class="icon-btn" id="r-toc-btn" title="Sommaire (T)"><svg class="icon"><use href="#i-toc"/></svg></button>
+        <button class="icon-btn" id="r-search-btn" title="Rechercher (F)"><svg class="icon"><use href="#i-search"/></svg></button>
+        <button class="icon-btn" id="r-bookmark-btn" title="Signet (B)"><svg class="icon"><use href="#i-bookmark"/></svg></button>
+        <button class="icon-btn" id="r-type-btn" title="Affichage"><svg class="icon"><use href="#i-type"/></svg></button>
+      </div>
+    </header>
+
+    <footer class="reader-foot">
+      <span id="r-foot-left"></span>
+      <span id="r-foot-right"></span>
+      <div id="r-progress" class="progress-track" title="Aller à…"><div class="progress-fill"></div><span class="progress-tip" hidden></span></div>
+    </footer>
+
+    <button id="r-return" class="return-pill" hidden><svg class="icon sm"><use href="#i-undo"/></svg><span>Revenir</span></button>
+
+    <div id="r-scrim" class="scrim" hidden></div>
+    <aside id="r-panel" class="panel" aria-label="Navigation">
+      <div class="panel-head">
+        <div class="tabs" role="tablist">
+          <button class="tab" data-tab="toc" role="tab">Sommaire</button>
+          <button class="tab" data-tab="bookmarks" role="tab">Signets</button>
+          <button class="tab" data-tab="search" role="tab">Recherche</button>
+        </div>
+        <button class="icon-btn" id="r-panel-close" title="Fermer (Échap)"><svg class="icon"><use href="#i-x"/></svg></button>
+      </div>
+      <div class="panel-body" data-pane="toc"><ol id="r-toc" class="toc"></ol></div>
+      <div class="panel-body" data-pane="bookmarks"><ul id="r-bookmarks" class="marks"></ul></div>
+      <div class="panel-body" data-pane="search">
+        <label class="search-field wide">
+          <svg class="icon"><use href="#i-search"/></svg>
+          <input id="r-search" type="search" placeholder="Rechercher dans ce livre…" autocomplete="off">
+        </label>
+        <p id="r-search-status" class="muted small"></p>
+        <ul id="r-results" class="results"></ul>
+      </div>
+    </aside>
+
+    <div id="r-typo" class="popover typo" hidden>
+      <div class="typo-row">
+        <span class="typo-label">Thème</span>
+        <div class="swatches" data-setting="theme">
+          <button data-value="light" class="swatch light" title="Clair">Aa</button>
+          <button data-value="sepia" class="swatch sepia" title="Sépia">Aa</button>
+          <button data-value="dark" class="swatch dark" title="Sombre">Aa</button>
+        </div>
+      </div>
+      <div class="typo-row">
+        <span class="typo-label">Taille</span>
+        <div class="stepper">
+          <button id="font-smaller" title="Plus petit (−)">A−</button>
+          <span id="font-size-val">19</span>
+          <button id="font-bigger" title="Plus grand (+)">A+</button>
+        </div>
+      </div>
+      <div class="typo-row">
+        <span class="typo-label">Police</span>
+        <div class="segmented" data-setting="font">
+          <button data-value="literata" class="f-literata">Livre</button>
+          <button data-value="sans" class="f-sans">Sans</button>
+          <button data-value="original">Éditeur</button>
+        </div>
+      </div>
+      <div class="typo-row">
+        <span class="typo-label">Interligne</span>
+        <div class="segmented" data-setting="lineHeight">
+          <button data-value="1.35">Serré</button>
+          <button data-value="1.6">Normal</button>
+          <button data-value="1.85">Aéré</button>
+        </div>
+      </div>
+      <div class="typo-row">
+        <span class="typo-label">Largeur</span>
+        <div class="segmented" data-setting="width">
+          <button data-value="narrow">Étroite</button>
+          <button data-value="medium">Moyenne</button>
+          <button data-value="wide">Large</button>
+        </div>
+      </div>
+      <label class="typo-row switch-row">
+        <span class="typo-label">Texte justifié</span>
+        <input type="checkbox" id="justify" class="switch">
+      </label>
+    </div>
+  </div>
+
+  <!-- ============ Dialogues ============ -->
+  <dialog id="settings-dialog" class="dialog">
+    <form method="dialog">
+      <header class="dialog-head">
+        <h2>Paramètres</h2>
+        <button class="icon-btn" value="close" title="Fermer"><svg class="icon"><use href="#i-x"/></svg></button>
+      </header>
+      <label class="field">
+        <span>Votre prénom <em>(pour l'accueil, facultatif)</em></span>
+        <input id="s-name" type="text" maxlength="40" autocomplete="given-name">
+      </label>
+      <div class="field">
+        <span>Thème</span>
+        <div class="segmented" data-setting="theme">
+          <button type="button" data-value="auto">Auto</button>
+          <button type="button" data-value="light">Clair</button>
+          <button type="button" data-value="sepia">Sépia</button>
+          <button type="button" data-value="dark">Sombre</button>
+        </div>
+      </div>
+      <div class="field">
+        <span>Sauvegarde</span>
+        <p class="muted small">Vos positions, signets, favoris et réglages dans un petit fichier, pour les garder à l'abri ou les transférer sur un autre appareil. Les fichiers EPUB eux-mêmes ne sont pas inclus.</p>
+        <div class="row">
+          <button type="button" class="btn" id="export-btn"><svg class="icon"><use href="#i-download"/></svg>Exporter mes données</button>
+          <button type="button" class="btn" id="import-btn"><svg class="icon"><use href="#i-upload"/></svg>Importer une sauvegarde</button>
+        </div>
+        <p id="storage-info" class="muted small"></p>
+      </div>
+      <details class="field">
+        <summary>Raccourcis clavier</summary>
+        <dl class="keys">
+          <dt><kbd>→</kbd> <kbd>Espace</kbd></dt><dd>Page suivante</dd>
+          <dt><kbd>←</kbd> <kbd>Maj</kbd>+<kbd>Espace</kbd></dt><dd>Page précédente</dd>
+          <dt><kbd>T</kbd></dt><dd>Sommaire</dd>
+          <dt><kbd>B</kbd></dt><dd>Ajouter / retirer un signet</dd>
+          <dt><kbd>F</kbd> <kbd>/</kbd></dt><dd>Rechercher dans le livre</dd>
+          <dt><kbd>+</kbd> <kbd>−</kbd></dt><dd>Taille du texte</dd>
+          <dt><kbd>Échap</kbd></dt><dd>Fermer un menu, puis revenir à la bibliothèque</dd>
+        </dl>
+      </details>
+    </form>
+  </dialog>
+
+  <dialog id="confirm-dialog" class="dialog small-dialog">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-text" class="muted"></p>
+      <div class="row end">
+        <button class="btn" value="cancel">Annuler</button>
+        <button class="btn danger" value="ok" id="confirm-ok">Confirmer</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="menu" class="popover menu" hidden></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+  <div id="drop" class="drop" hidden><div><svg class="icon"><use href="#i-upload"/></svg><p>Déposez vos EPUB ici</p></div></div>
+  <input type="file" id="file-input" accept=".epub,application/epub+zip" multiple hidden>
+  <input type="file" id="backup-input" accept=".json,application/json" hidden>
+
+  <script src="js/fonts.js"></script>
+  <script src="js/zip.js"></script>
+  <script src="js/epub.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/reader.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
