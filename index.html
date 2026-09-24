@@ -14,8 +14,10 @@
     // Applique le thème avant l'affichage pour éviter un flash.
     try {
       var t = (JSON.parse(localStorage.getItem("smacpub:settings")) || {}).theme || "auto";
+      var st = JSON.parse(localStorage.getItem("smacpub:settings")) || {};
       if (t === "auto") t = matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
       document.documentElement.dataset.theme = t;
+      document.documentElement.dataset.accent = st.accent || "orange";
     } catch (e) {}
   </script>
 </head>
@@ -41,6 +43,8 @@
     <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
     <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></symbol>
     <symbol id="i-restart" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></symbol>
+    <symbol id="i-zoom-out" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M8 11h6"/></symbol>
     <symbol id="i-logo" viewBox="0 0 512 512"><path d="M248 172c-40-30-92-40-140-36v220c48-4 100 6 140 36z"/><path d="M264 172c40-30 92-40 140-36v220c-48-4-100 6-140 36z" opacity=".78"/></symbol>
   </svg>
 
@@ -127,6 +131,7 @@
       <div id="r-progress" class="progress-track" title="Aller à…"><div class="progress-fill"></div><span class="progress-tip" hidden></span></div>
     </footer>
 
+    <button id="r-zoom" class="zoom-pill" hidden title="Revenir à la taille normale (0)"><svg class="icon sm"><use href="#i-zoom-out"/></svg><span>100 %</span></button>
     <button id="r-return" class="return-pill" hidden><svg class="icon sm"><use href="#i-undo"/></svg><span>Revenir</span></button>
 
     <div id="r-scrim" class="scrim" hidden></div>
@@ -185,6 +190,14 @@
         </div>
       </div>
       <div class="typo-row">
+        <span class="typo-label">Pages</span>
+        <div class="segmented" data-setting="spread">
+          <button data-value="auto" title="Deux pages si la fenêtre est assez large">Auto</button>
+          <button data-value="one">Une</button>
+          <button data-value="two">Deux</button>
+        </div>
+      </div>
+      <div class="typo-row">
         <span class="typo-label">Largeur</span>
         <div class="segmented" data-setting="width">
           <button data-value="narrow">Étroite</button>
@@ -220,6 +233,17 @@
         </div>
       </div>
       <div class="field">
+        <span>Couleur</span>
+        <div class="accents" data-setting="accent">
+          <button type="button" data-value="orange" class="accent-dot" style="--c:#b5542b" title="Orange"></button>
+          <button type="button" data-value="violet" class="accent-dot" style="--c:#7446b8" title="Violet"></button>
+          <button type="button" data-value="bleu" class="accent-dot" style="--c:#2d68ad" title="Bleu"></button>
+          <button type="button" data-value="vert" class="accent-dot" style="--c:#3b7a4b" title="Vert"></button>
+          <button type="button" data-value="rose" class="accent-dot" style="--c:#bd3d6c" title="Rose"></button>
+          <button type="button" data-value="ardoise" class="accent-dot" style="--c:#4b5665" title="Ardoise"></button>
+        </div>
+      </div>
+      <div class="field">
         <span>Sauvegarde</span>
         <p class="muted small">Vos positions, signets, favoris et réglages dans un petit fichier, pour les garder à l'abri ou les transférer sur un autre appareil. Les fichiers EPUB eux-mêmes ne sont pas inclus.</p>
         <div class="row">
@@ -237,6 +261,7 @@
           <dt><kbd>B</kbd></dt><dd>Ajouter / retirer un signet</dd>
           <dt><kbd>F</kbd> <kbd>/</kbd></dt><dd>Rechercher dans le livre</dd>
           <dt><kbd>+</kbd> <kbd>−</kbd></dt><dd>Taille du texte</dd>
+          <dt>Molette</dt><dd>Zoomer vers le curseur (glisser pour se déplacer, <kbd>0</kbd> pour revenir)</dd>
           <dt><kbd>Échap</kbd></dt><dd>Fermer un menu, puis revenir à la bibliothèque</dd>
         </dl>
       </details>
@@ -258,6 +283,7 @@
   <div id="toasts" class="toasts" aria-live="polite"></div>
   <div id="drop" class="drop" hidden><div><svg class="icon"><use href="#i-upload"/></svg><p>Déposez vos EPUB ici</p></div></div>
   <input type="file" id="file-input" accept=".epub,application/epub+zip" multiple hidden>
+  <input type="file" id="cover-input" accept="image/*" hidden>
   <input type="file" id="backup-input" accept=".json,application/json" hidden>
 
   <script src="js/fonts.js"></script>

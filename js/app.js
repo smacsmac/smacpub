@@ -32,7 +32,7 @@ function toast(message, type = "", ms = 3500) {
 
 const Settings = {
   KEY: "smacpub:settings",
-  DEFAULTS: { theme: "auto", font: "literata", fontSize: 19, lineHeight: 1.6, width: "medium", justify: true, name: "" },
+  DEFAULTS: { theme: "auto", accent: "orange", font: "literata", fontSize: 19, lineHeight: 1.6, width: "medium", spread: "auto", justify: true, name: "" },
   data: null,
   load() {
     let saved = {};
@@ -43,6 +43,8 @@ const Settings = {
     const out = {};
     if (["auto", "light", "sepia", "dark"].includes(s.theme)) out.theme = s.theme;
     if (["literata", "sans", "original"].includes(s.font)) out.font = s.font;
+    if (ACCENTS[s.accent]) out.accent = s.accent;
+    if (["auto", "one", "two"].includes(s.spread)) out.spread = s.spread;
     if (Number.isFinite(+s.fontSize)) out.fontSize = Math.min(36, Math.max(12, Math.round(+s.fontSize)));
     if ([1.35, 1.6, 1.85].includes(+s.lineHeight)) out.lineHeight = +s.lineHeight;
     if (["narrow", "medium", "wide"].includes(s.width)) out.width = s.width;
@@ -56,10 +58,20 @@ const Settings = {
   set(key, value) {
     this.data[key] = value;
     this.save();
-    if (key === "theme") applyTheme();
+    if (key === "theme" || key === "accent") applyTheme();
     else if (Read.reader) Read.reader.setSettings(readerSettings());
     syncControls();
   },
+};
+
+/* Couleurs d'accent : [thème clair/sépia, thème sombre] */
+const ACCENTS = {
+  orange: ["#b5542b", "#e8905f"],
+  violet: ["#7446b8", "#b89af0"],
+  bleu: ["#2d68ad", "#80b2ec"],
+  vert: ["#3b7a4b", "#83c796"],
+  rose: ["#bd3d6c", "#f090b3"],
+  ardoise: ["#4b5665", "#aab6c4"],
 };
 
 const THEME_COLORS = {
@@ -76,11 +88,15 @@ function resolvedTheme() {
 
 function readerSettings() {
   const s = Settings.data;
-  return { fontSize: s.fontSize, font: s.font, lineHeight: s.lineHeight, width: s.width, justify: s.justify, colors: THEME_COLORS[resolvedTheme()] };
+  const theme = resolvedTheme();
+  const accent = (ACCENTS[s.accent] || ACCENTS.orange)[theme === "dark" ? 1 : 0];
+  const colors = { ...THEME_COLORS[theme], link: accent, selection: `color-mix(in srgb, ${accent} 26%, transparent)` };
+  return { fontSize: s.fontSize, font: s.font, lineHeight: s.lineHeight, width: s.width, spread: s.spread, justify: s.justify, colors };
 }
 
 function applyTheme() {
   document.documentElement.dataset.theme = resolvedTheme();
+  document.documentElement.dataset.accent = Settings.data.accent;
   updateThemeColor();
   if (Read.reader) Read.reader.setSettings(readerSettings());
 }
@@ -311,6 +327,8 @@ const Library = {
       <button data-act="favorite"><svg class="icon"><use href="#i-star"/></svg>${s.favorite ? "Retirer des favoris" : "Ajouter aux favoris"}</button>
       <button data-act="finished"><svg class="icon"><use href="#i-check"/></svg>${s.finished ? "Marquer comme non terminé" : "Marquer comme terminé"}</button>
       ${s.lastReadAt ? `<button data-act="restart"><svg class="icon"><use href="#i-restart"/></svg>Recommencer au début</button>` : ""}
+      <button data-act="cover"><svg class="icon"><use href="#i-image"/></svg>Changer la couverture…</button>
+      ${b.customCover ? `<button data-act="cover-reset"><svg class="icon"><use href="#i-undo"/></svg>Couverture d’origine</button>` : ""}
       <hr>
       <button data-act="remove" class="danger"><svg class="icon"><use href="#i-trash"/></svg>Retirer de la bibliothèque</button>`;
     menu.dataset.id = id;
@@ -329,6 +347,14 @@ const Library = {
     this.menuButton = null;
   },
 
+  async setCover(b, cover, custom) {
+    const { state, ...book } = b;
+    await DB.put("books", { ...book, cover, customCover: custom });
+    if (this.covers.has(b.id)) { URL.revokeObjectURL(this.covers.get(b.id)); this.covers.delete(b.id); }
+    toast(custom ? "Couverture mise à jour." : "Couverture d’origine rétablie.");
+    await this.refresh();
+  },
+
   async act(action, id) {
     this.closeMenu();
     const b = this.book(id);
@@ -340,6 +366,21 @@ const Library = {
       s.finished = !s.finished;
       if (s.finished) s.lastReadAt = s.lastReadAt || Date.now();
       else if (s.progress >= 1) s.progress = 0.99;
+    }
+    if (action === "cover") {
+      const input = $("#cover-input");
+      input.dataset.id = id;
+      input.click();
+      return;
+    }
+    if (action === "cover-reset") {
+      let cover = null;
+      try {
+        const epub = await Epub.open(await DB.get("files", id));
+        cover = await makeThumb(await epub.coverBlob());
+        epub.destroy();
+      } catch (err) { console.error(err); }
+      return this.setCover(b, cover, false);
     }
     if (action === "restart") {
       Object.assign(s, { location: null, progress: 0, finished: false, chapter: "" });
@@ -426,6 +467,12 @@ const Read = {
       onPointerMove: (x, y) => this.pointer(y),
       onLink: (from) => this.showReturn(from),
       onLoading: (on) => { $("#r-loading").hidden = !on; },
+      onZoom: (z) => {
+        const pill = $("#r-zoom");
+        pill.hidden = z <= 1;
+        Read.el.classList.toggle("zoomed", z > 1);
+        $("span", pill).textContent = Math.round(z * 100) + " %";
+      },
       onEnd: () => toast("Vous avez terminé ce livre. Bravo !"),
       onError: (err) => toast("Erreur d’affichage : " + err.message, "error"),
     });
@@ -453,6 +500,7 @@ const Read = {
     this.hideReturn();
     this.el.hidden = true;
     this.el.classList.remove("chrome");
+    $("#r-zoom").hidden = true;
     $("#library").hidden = false;
     document.title = "Smacpub";
     updateThemeColor();
@@ -666,7 +714,11 @@ function onKey(e) {
     case "f": case "F": case "/": Read.openPanel("search"); break;
     case "+": case "=": Settings.set("fontSize", Math.min(36, Settings.data.fontSize + 1)); break;
     case "-": case "_": Settings.set("fontSize", Math.max(12, Settings.data.fontSize - 1)); break;
-    case "Escape": if (!Read.closeOverlays()) go("#/"); break;
+    case "0": Read.reader.resetZoom(); break;
+    case "Escape":
+      if (Read.reader.zoomed) Read.reader.resetZoom();
+      else if (!Read.closeOverlays()) go("#/");
+      break;
     default: return;
   }
   e.preventDefault();
@@ -798,6 +850,14 @@ function bind() {
   }
   $("#export-btn").addEventListener("click", exportData);
   $("#import-btn").addEventListener("click", () => $("#backup-input").click());
+  $("#cover-input").addEventListener("change", async (e) => {
+    const f = e.target.files[0], b = Library.book(e.target.dataset.id);
+    e.target.value = "";
+    if (!f || !b) return;
+    const cover = await makeThumb(f);
+    if (!cover) return toast("Cette image n’a pas pu être lue.", "error");
+    await Library.setCover(b, cover, true);
+  });
   $("#backup-input").addEventListener("change", async (e) => {
     const f = e.target.files[0];
     e.target.value = "";
@@ -893,13 +953,19 @@ function bind() {
   const stage = $("#r-stage");
   stage.addEventListener("click", (e) => {
     if (e.target !== stage || !Read.reader) return;
-    if (Read.closeOverlays()) return;
+    if (Read.closeOverlays() || Read.reader.zoomed) return;
     const f = Read.reader.frame;
     if (e.clientX < f.offsetLeft) Read.prev();
     else if (e.clientX > f.offsetLeft + f.offsetWidth) Read.next();
     else Read.toggleChrome();
   });
-  stage.addEventListener("wheel", (e) => Read.reader && Read.reader.wheel(e), { passive: false });
+  // Molette : zoom doux centré sur le curseur (voir Reader.zoomWheel).
+  stage.addEventListener("wheel", (e) => {
+    if (!Read.reader) return;
+    const r = stage.getBoundingClientRect();
+    Read.reader.zoomWheel(e, e.clientX - r.left, e.clientY - r.top);
+  }, { passive: false });
+  $("#r-zoom").addEventListener("click", () => Read.reader && Read.reader.resetZoom());
   Read.el.addEventListener("mousemove", (e) => Read.pointer(e.clientY));
 
   window.addEventListener("keydown", onKey);

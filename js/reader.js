@@ -16,8 +16,7 @@ class Reader {
     this.queue = Promise.resolve();
     this.loadToken = 0;
     this.folded = new Map();
-    this.wheelLast = 0;
-    this.wheelAcc = 0;
+    this.zoom = { s: 1, x: 0, y: 0, ts: 1, tx: 0, ty: 0 };
     const lengths = opts.lengths && opts.lengths.length === epub.spine.length ? opts.lengths : null;
     this.prefix = [0];
     if (lengths) for (const n of lengths) this.prefix.push(this.prefix[this.prefix.length - 1] + n);
@@ -60,7 +59,7 @@ class Reader {
         return;
       }
       if (a) e.preventDefault();
-      if (!this.win.getSelection().isCollapsed || this.swiped) return;
+      if (!this.win.getSelection().isCollapsed || this.swiped || this.zoomed) return;
       this.opts.onTap && this.opts.onTap(...toStage(e), this.pointerType);
     });
     d.addEventListener("pointerdown", (e) => {
@@ -77,7 +76,10 @@ class Reader {
       }
       this.swipeStart = null;
     });
-    d.addEventListener("wheel", (e) => this.wheel(e), { passive: false });
+    d.addEventListener("wheel", (e) => {
+      const r = this.frame.getBoundingClientRect(), st = this.stage.getBoundingClientRect();
+      this.zoomWheel(e, r.left - st.left + e.clientX * this.zoom.s, r.top - st.top + e.clientY * this.zoom.s);
+    }, { passive: false });
     d.addEventListener("keydown", (e) => this.opts.onKey && this.opts.onKey(e));
     d.addEventListener("mousemove", (e) => this.opts.onPointerMove && this.opts.onPointerMove(...toStage(e)));
     this.win.addEventListener("scroll", () => {
@@ -111,6 +113,7 @@ class Reader {
   relayout() {
     return this.run(() => {
       if (!this.doc || this.index < 0) return;
+      this.resetZoom(true);
       this.layout();
       this.measure();
       this.setPage(this.pageOfAnchor(this.anchor), this.anchor);
@@ -124,10 +127,20 @@ class Reader {
     const pad = compact ? 20 : 28;
     const measure = s.fontSize * ({ narrow: 28, medium: 34, wide: 44 }[s.width] || 34);
     const room = sw - (compact ? 0 : 112);
-    const textW = Math.max(160, Math.min(measure, room - 2 * pad));
-    const W = Math.round(textW + 2 * pad);
+    // Double page : forcée, ou automatique si la fenêtre est assez large (paysage).
+    const fitsTwo = room >= 2 * (s.fontSize * 24 + 2 * pad) && sw > sh * 1.15;
+    const cols = compact ? 1 : s.spread === "two" ? 2 : s.spread === "one" ? 1 : fitsTwo ? 2 : 1;
+    const textW = Math.max(160, Math.min(measure, (room - 2 * cols * pad) / cols));
+    const colW = Math.round(textW + 2 * pad);
+    const W = colW * cols; // largeur visible = une « page » (une ou deux colonnes)
     const top = sh < 520 ? 44 : 64, bottom = sh < 520 ? 36 : 52;
     const H = Math.max(160, sh - top - bottom);
+    if (cols !== this.cols || W !== this.W) this.resetZoom(true);
+    if (!this.spine) { this.spine = document.createElement("div"); this.spine.className = "spine"; this.stage.append(this.spine); }
+    this.spine.hidden = cols !== 2;
+    Object.assign(this.spine.style, { left: Math.round((sw - W) / 2) + colW + "px", top: top + "px", height: H + "px" });
+    this.cols = cols;
+    this.colW = colW;
     this.W = W;
     this.H = H;
     this.pad = pad;
@@ -139,11 +152,12 @@ class Reader {
   }
 
   measure() {
-    this.pages = Math.max(1, Math.round(this.doc.scrollingElement.scrollWidth / this.W));
+    const columns = Math.max(1, Math.round(this.doc.scrollingElement.scrollWidth / this.colW));
+    this.pages = Math.ceil(columns / this.cols);
   }
 
   css() {
-    const s = this.settings, t = s.colors, W = this.W, H = this.H, P = this.pad;
+    const s = this.settings, t = s.colors, W = this.colW, H = this.H, P = this.pad;
     const family = { literata: '"Literata", Georgia, serif', sans: 'system-ui, Roboto, "Noto Sans", "Segoe UI", sans-serif' }[s.font];
     return `
 html {
@@ -265,6 +279,7 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
       }
       const ch = this.chapter, data = ch.data, p = ch.parts[part], d = this.doc;
       this.frame.style.visibility = "hidden";
+      this.resetZoom(true);
       for (const el of [...d.head.querySelectorAll("style[data-book]")]) el.remove();
       for (const text of data.styles) {
         const el = d.createElement("style");
@@ -499,6 +514,7 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
   }
 
   setPage(p, anchor) {
+    if (p !== this.page) this.resetZoom(true);
     this.page = p;
     this.anchor = anchor;
     this.doc.scrollingElement.scrollLeft = p * this.W;
@@ -528,19 +544,102 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
     });
   }
 
-  /** Molette / pavé tactile : une page par geste. */
-  wheel(e) {
+  /* ---------- Zoom (molette), centré sur le curseur ---------- */
+
+  /** x, y : position du curseur dans la scène. */
+  zoomWheel(e, x, y) {
     e.preventDefault();
-    const now = performance.now();
-    if (now - this.wheelLast > 200) { this.wheelAcc = 0; this.wheelDone = false; }
-    this.wheelLast = now;
-    if (this.wheelDone) return;
-    this.wheelAcc += Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-    if (Math.abs(this.wheelAcc) >= 40) {
-      this.wheelAcc > 0 ? this.next() : this.prev();
-      this.wheelDone = true;
-    }
+    const z = this.zoom;
+    const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
+    const target = Math.min(5, Math.max(1, z.ts * Math.exp(-delta * (e.ctrlKey ? 0.01 : 0.002))));
+    // Le point sous le curseur reste immobile.
+    const fx = (x - this.frame.offsetLeft - z.tx) / z.ts, fy = (y - this.frame.offsetTop - z.ty) / z.ts;
+    z.ts = target;
+    z.tx = x - this.frame.offsetLeft - fx * target;
+    z.ty = y - this.frame.offsetTop - fy * target;
+    this.clampZoom();
+    this.animateZoom();
   }
+
+  /** Calque posé sur la page pendant le zoom : glisser pour se déplacer, molette pour zoomer. */
+  makeShield() {
+    const sh = document.createElement("div");
+    sh.className = "zoom-shield";
+    sh.hidden = true;
+    let last = null;
+    sh.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      sh.setPointerCapture(e.pointerId);
+      last = [e.clientX, e.clientY];
+      sh.classList.add("dragging");
+    });
+    sh.addEventListener("pointermove", (e) => {
+      if (!last) return;
+      this.pan(e.clientX - last[0], e.clientY - last[1]);
+      last = [e.clientX, e.clientY];
+    });
+    const end = () => { last = null; sh.classList.remove("dragging"); };
+    sh.addEventListener("pointerup", end);
+    sh.addEventListener("pointercancel", end);
+    sh.addEventListener("dblclick", () => this.resetZoom());
+    this.stage.append(sh);
+    this.shield = sh;
+  }
+
+  pan(dx, dy) {
+    const z = this.zoom;
+    z.tx += dx; z.ty += dy; z.x += dx; z.y += dy;
+    this.clampZoom();
+    z.x = z.tx; z.y = z.ty;
+    this.applyZoom();
+  }
+
+  clampZoom() {
+    const z = this.zoom, f = this.frame;
+    const sw = this.stage.clientWidth, sh = this.stage.clientHeight;
+    const clamp = (v, left, size, total) => {
+      const w = size * z.ts, lo = w >= total ? total - w : 0, hi = w >= total ? 0 : total - w;
+      return Math.min(hi, Math.max(lo, left + v)) - left;
+    };
+    if (z.ts <= 1.001) { z.ts = 1; z.tx = 0; z.ty = 0; return; }
+    z.tx = clamp(z.tx, f.offsetLeft, f.offsetWidth, sw);
+    z.ty = clamp(z.ty, f.offsetTop, f.offsetHeight, sh);
+  }
+
+  animateZoom() {
+    if (this.zoomRaf) return;
+    const step = () => {
+      const z = this.zoom, k = 0.28;
+      z.s += (z.ts - z.s) * k; z.x += (z.tx - z.x) * k; z.y += (z.ty - z.y) * k;
+      const done = Math.abs(z.ts - z.s) < 0.002 && Math.abs(z.tx - z.x) < 0.3 && Math.abs(z.ty - z.y) < 0.3;
+      if (done) { z.s = z.ts; z.x = z.tx; z.y = z.ty; }
+      this.applyZoom();
+      this.zoomRaf = done ? 0 : requestAnimationFrame(step);
+    };
+    this.zoomRaf = requestAnimationFrame(step);
+  }
+
+  applyZoom() {
+    const z = this.zoom;
+    this.frame.style.transform = z.s === 1 ? "" : `translate(${z.x}px, ${z.y}px) scale(${z.s})`;
+    if (!this.shield) this.makeShield();
+    this.shield.hidden = !(z.ts > 1);
+    this.opts.onZoom && this.opts.onZoom(z.ts);
+  }
+
+  resetZoom(instant) {
+    const z = this.zoom;
+    if (!z || (z.ts === 1 && z.s === 1)) return;
+    z.ts = 1; z.tx = 0; z.ty = 0;
+    if (instant) {
+      cancelAnimationFrame(this.zoomRaf);
+      this.zoomRaf = 0;
+      z.s = 1; z.x = 0; z.y = 0;
+      this.applyZoom();
+    } else this.animateZoom();
+  }
+
+  get zoomed() { return this.zoom.ts > 1; }
 
   location() {
     const loc = { index: this.index, char: this.anchor.char };
@@ -638,10 +737,13 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
 
   destroy() {
     this.destroyed = true;
+    cancelAnimationFrame(this.zoomRaf);
     this.loadToken++;
     if (this.resizer) this.resizer.disconnect();
     clearTimeout(this.resizeTimer);
     if (this.frame) this.frame.remove();
+    if (this.spine) this.spine.remove();
+    if (this.shield) this.shield.remove();
     this.folded.clear();
     this.chapter = null;
   }

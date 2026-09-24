@@ -10,10 +10,10 @@ Pas de compte, pas de serveur : vos livres et vos positions de lecture restent s
 - Grille de couvertures avec progression. Une couverture est générée si le livre n'en a pas.
 - Carte « Continuer la lecture » en haut : le dernier livre ouvert, le chapitre, le pourcentage.
 - Filtres (en cours, à lire, terminés, favoris), tri (récents, titre, auteur, ajout, progression), recherche par titre ou auteur.
-- Menu par livre : favori, marquer comme terminé, recommencer au début, retirer de la bibliothèque (le fichier d'origine n'est jamais touché).
+- Menu par livre : favori, marquer comme terminé, recommencer au début, changer la couverture (avec retour à l'originale), retirer de la bibliothèque (le fichier d'origine n'est jamais touché).
 
 **Lecture**
-- Pages à tourner (flèches, espace, molette ou pavé tactile, glissement du doigt, clic dans les marges).
+- Pages à tourner (flèches, espace, glissement du doigt, clic dans les marges).
 - **La position est enregistrée à chaque page tournée**, même si l'appli est fermée brutalement. En rouvrant l'appli, on retombe directement sur la page où on s'était arrêté.
 - Cette position ne dépend pas de la taille du texte : on peut changer de police ou redimensionner la fenêtre sans perdre sa page.
 - Sommaire (y compris pour les vieux EPUB sans sommaire : il est reconstruit à partir des titres).
@@ -21,7 +21,9 @@ Pas de compte, pas de serveur : vos livres et vos positions de lecture restent s
 - Signets avec un extrait du passage, le chapitre et la date.
 - Liens internes (notes de bas de page…) avec un bouton « Revenir ».
 - Barre de progression cliquable pour sauter n'importe où dans le livre.
-- Thèmes clair, sépia et sombre ; police « livre » (Literata, incluse), sans-serif ou celle de l'éditeur ; taille, interligne, largeur de colonne, texte justifié.
+- Une ou deux pages à la fois (automatique quand la fenêtre est assez large).
+- Zoom à la molette, doux et centré sur le curseur ; glisser pour se déplacer, `0` ou `Échap` pour revenir.
+- Thèmes clair, sépia et sombre, et une couleur d'accent au choix (orange, violet, bleu, vert, rose, ardoise) ; police « livre » (Literata, incluse), sans-serif ou celle de l'éditeur ; taille, interligne, largeur de colonne, texte justifié.
 
 **Vieux EPUB**
 - EPUB 2 (NCX) et EPUB 3 (nav), HTML mal formé, encodages anciens (ISO-8859-1, Windows-1252…), métadonnées manquantes.
@@ -56,6 +58,7 @@ Tout fonctionne aussi, mais l'appli n'apparaît pas dans le lanceur.
 | `B` | Ajouter / retirer un signet |
 | `F` ou `/` | Rechercher dans le livre |
 | `+` / `−` | Taille du texte |
+| Molette | Zoomer vers le curseur (`0` pour revenir à 100 %) |
 | `Échap` | Fermer un menu, puis revenir à la bibliothèque |
 
 ## Vos données
