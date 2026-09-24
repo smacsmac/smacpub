@@ -715,6 +715,11 @@ function onKey(e) {
     case "+": case "=": Settings.set("fontSize", Math.min(36, Settings.data.fontSize + 1)); break;
     case "-": case "_": Settings.set("fontSize", Math.max(12, Settings.data.fontSize - 1)); break;
     case "0": Read.reader.resetZoom(); break;
+    case "1": Settings.set("spread", "one"); toast("Une page à la fois", "", 1500); break;
+    case "2":
+      Settings.set("spread", "two");
+      toast(Read.reader.stage.clientWidth < 700 ? "Fenêtre trop étroite pour deux pages" : "Deux pages à la fois", "", 1500);
+      break;
     case "Escape":
       if (Read.reader.zoomed) Read.reader.resetZoom();
       else if (!Read.closeOverlays()) go("#/");

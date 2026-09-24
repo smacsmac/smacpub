@@ -58,6 +58,7 @@ Tout fonctionne aussi, mais l'appli n'apparaît pas dans le lanceur.
 | `B` | Ajouter / retirer un signet |
 | `F` ou `/` | Rechercher dans le livre |
 | `+` / `−` | Taille du texte |
+| `1` / `2` | Une page / deux pages à la fois |
 | Molette | Zoomer vers le curseur (`0` pour revenir à 100 %) |
 | `Échap` | Fermer un menu, puis revenir à la bibliothèque |
 
