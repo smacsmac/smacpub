@@ -244,7 +244,9 @@ select {
 
 /* ================= Lecteur ================= */
 .reader { position: fixed; inset: 0; z-index: 10; background: var(--page-bg); color: var(--page-fg); overflow: hidden; }
-.stage { position: absolute; inset: 0; }
+.stage { position: absolute; inset: 0; touch-action: none; }
+.reader { touch-action: none; }
+.reader .panel, .reader .popover { touch-action: pan-y; }
 .book-frame { position: absolute; border: 0; background: transparent; transform-origin: 0 0; }
 
 .reader-bar {
@@ -318,6 +320,7 @@ select {
   background: linear-gradient(transparent, color-mix(in srgb, var(--page-fg) 12%, transparent) 15%, color-mix(in srgb, var(--page-fg) 12%, transparent) 85%, transparent);
 }
 .reader.zoomed .reader-foot { background: var(--page-bg); }
+.reader.zoomed .spine { display: none; }
 .zoom-shield { position: absolute; inset: 0; z-index: 2; cursor: grab; touch-action: none; }
 .zoom-shield.dragging { cursor: grabbing; }
 .zoom-pill {

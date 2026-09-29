@@ -464,13 +464,14 @@ const Read = {
       onRelocate: (loc) => this.relocated(loc),
       onTap: (x, y, type) => this.tap(x, y, type),
       onKey: onKey,
+      onKeyUp: onKeyUp,
       onPointerMove: (x, y) => this.pointer(y),
       onLink: (from) => this.showReturn(from),
       onLoading: (on) => { $("#r-loading").hidden = !on; },
-      onZoom: (z) => {
+      onZoom: (z, moved) => {
         const pill = $("#r-zoom");
-        pill.hidden = z <= 1;
-        Read.el.classList.toggle("zoomed", z > 1);
+        pill.hidden = !moved;
+        Read.el.classList.toggle("zoomed", moved);
         $("span", pill).textContent = Math.round(z * 100) + " %";
       },
       onEnd: () => toast("Vous avez terminé ce livre. Bravo !"),
@@ -691,6 +692,12 @@ const Read = {
 
 /* ================= Clavier ================= */
 
+const HOLD_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown"];
+
+function onKeyUp(e) {
+  if (Read.reader && HOLD_KEYS.includes(e.code)) Read.reader.hold(e.code, false);
+}
+
 function onKey(e) {
   if (!Read.reader || Read.el.hidden) {
     if (e.key === "Escape") Library.closeMenu();
@@ -705,9 +712,15 @@ function onKey(e) {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") { e.preventDefault(); Read.openPanel("search"); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const onButton = tag === "BUTTON";
+  // WASD (position physique des touches, aussi en AZERTY) : déplacer la page ; ↑ / ↓ : zoomer.
+  if (HOLD_KEYS.includes(e.code)) {
+    e.preventDefault();
+    Read.reader.hold(e.code, true);
+    return;
+  }
   switch (e.key) {
-    case "ArrowRight": case "ArrowDown": case "PageDown": Read.next(); break;
-    case "ArrowLeft": case "ArrowUp": case "PageUp": Read.prev(); break;
+    case "ArrowRight": case "PageDown": Read.next(); break;
+    case "ArrowLeft": case "PageUp": Read.prev(); break;
     case " ": if (onButton) return; e.shiftKey ? Read.prev() : Read.next(); break;
     case "t": case "T": Read.togglePanel("toc"); break;
     case "b": case "B": Read.toggleBookmark(); break;
@@ -965,8 +978,10 @@ function bind() {
     else Read.toggleChrome();
   });
   // Molette : zoom doux centré sur le curseur (voir Reader.zoomWheel).
-  stage.addEventListener("wheel", (e) => {
+  // Dans le lecteur, la molette et le pincement zooment la page seule (jamais toute l'interface).
+  Read.el.addEventListener("wheel", (e) => {
     if (!Read.reader) return;
+    if (e.target.closest(".panel, .popover")) { if (e.ctrlKey) e.preventDefault(); return; }
     const r = stage.getBoundingClientRect();
     Read.reader.zoomWheel(e, e.clientX - r.left, e.clientY - r.top);
   }, { passive: false });
@@ -974,6 +989,8 @@ function bind() {
   Read.el.addEventListener("mousemove", (e) => Read.pointer(e.clientY));
 
   window.addEventListener("keydown", onKey);
+  window.addEventListener("keyup", onKeyUp);
+  window.addEventListener("blur", () => Read.reader && Read.reader.releaseKeys());
   window.addEventListener("hashchange", route);
   darkQuery.addEventListener("change", () => { if (Settings.data.theme === "auto") applyTheme(); });
 

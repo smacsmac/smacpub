@@ -17,6 +17,8 @@ class Reader {
     this.loadToken = 0;
     this.folded = new Map();
     this.zoom = { s: 1, x: 0, y: 0, ts: 1, tx: 0, ty: 0 };
+    this.touches = new Map();
+    this.held = new Set();
     const lengths = opts.lengths && opts.lengths.length === epub.spine.length ? opts.lengths : null;
     this.prefix = [0];
     if (lengths) for (const n of lengths) this.prefix.push(this.prefix[this.prefix.length - 1] + n);
@@ -62,26 +64,47 @@ class Reader {
       if (!this.win.getSelection().isCollapsed || this.swiped || this.zoomed) return;
       this.opts.onTap && this.opts.onTap(...toStage(e), this.pointerType);
     });
+    // Position à l'écran d'un événement de la page (en tenant compte du zoom).
+    const screen = (e) => {
+      const r = this.frame.getBoundingClientRect();
+      return [r.left + e.clientX * this.zoom.s, r.top + e.clientY * this.zoom.s];
+    };
     d.addEventListener("pointerdown", (e) => {
       this.pointerType = e.pointerType;
       this.swipeStart = [e.clientX, e.clientY];
       this.swiped = false;
+      if (e.pointerType !== "mouse") this.touchStart(e, ...screen(e));
     });
-    d.addEventListener("pointerup", (e) => {
-      if (!this.swipeStart || e.pointerType === "mouse") return;
+    d.addEventListener("pointermove", (e) => {
+      if (e.pointerType !== "mouse" && this.touchMove(e, ...screen(e))) this.swipeStart = null;
+    });
+    const up = (e) => {
+      if (e.pointerType !== "mouse") this.touchEnd(e);
+      if (!this.swipeStart || e.pointerType === "mouse" || this.touches.size) return;
       const dx = e.clientX - this.swipeStart[0], dy = e.clientY - this.swipeStart[1];
       if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
         this.swiped = true;
         dx < 0 ? this.next() : this.prev();
       }
       this.swipeStart = null;
-    });
+    };
+    d.addEventListener("pointerup", up);
+    d.addEventListener("pointercancel", up);
     d.addEventListener("wheel", (e) => {
-      const r = this.frame.getBoundingClientRect(), st = this.stage.getBoundingClientRect();
-      this.zoomWheel(e, r.left - st.left + e.clientX * this.zoom.s, r.top - st.top + e.clientY * this.zoom.s);
+      const st = this.stage.getBoundingClientRect(), [x, y] = screen(e);
+      this.zoomWheel(e, x - st.left, y - st.top);
     }, { passive: false });
+    d.addEventListener("keyup", (e) => this.opts.onKeyUp && this.opts.onKeyUp(e));
     d.addEventListener("keydown", (e) => this.opts.onKey && this.opts.onKey(e));
-    d.addEventListener("mousemove", (e) => this.opts.onPointerMove && this.opts.onPointerMove(...toStage(e)));
+    d.addEventListener("mousemove", (e) => {
+      const st = this.stage.getBoundingClientRect(), [x, y] = screen(e);
+      this.pointer = [x - st.left, y - st.top];
+      this.opts.onPointerMove && this.opts.onPointerMove(...toStage(e));
+    });
+    this.stage.addEventListener("mousemove", (e) => {
+      const st = this.stage.getBoundingClientRect();
+      this.pointer = [e.clientX - st.left, e.clientY - st.top];
+    });
     this.win.addEventListener("scroll", () => {
       const se = this.doc.scrollingElement;
       if (Math.abs(se.scrollLeft - this.page * this.W) > 1) se.scrollLeft = this.page * this.W;
@@ -169,7 +192,7 @@ html {
   overflow: hidden !important; writing-mode: horizontal-tb !important;
   font-size: ${s.fontSize}px !important; color: ${t.fg}; background: transparent !important;
   color-scheme: ${t.dark ? "dark" : "light"}; -webkit-text-size-adjust: none; text-size-adjust: none;
-  overflow-wrap: break-word;
+  overflow-wrap: break-word; touch-action: none;
 }
 body {
   margin: 0 !important; padding: 0 !important; border: 0 !important;
@@ -279,7 +302,6 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
       }
       const ch = this.chapter, data = ch.data, p = ch.parts[part], d = this.doc;
       this.frame.style.visibility = "hidden";
-      this.resetZoom(true);
       for (const el of [...d.head.querySelectorAll("style[data-book]")]) el.remove();
       for (const text of data.styles) {
         const el = d.createElement("style");
@@ -514,7 +536,6 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
   }
 
   setPage(p, anchor) {
-    if (p !== this.page) this.resetZoom(true);
     this.page = p;
     this.anchor = anchor;
     this.doc.scrollingElement.scrollLeft = p * this.W;
@@ -544,41 +565,49 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
     });
   }
 
-  /* ---------- Zoom (molette), centré sur le curseur ---------- */
+  /* ---------- Zoom et déplacement de la vue ----------
+     La page (l'iframe) est agrandie par une transformation CSS ; la barre, le pied de page
+     et les boutons restent à leur taille normale. Coordonnées x, y : dans la scène. */
 
-  /** x, y : position du curseur dans la scène. */
+  /** Molette ou pincement du pavé tactile (ctrl + molette). */
   zoomWheel(e, x, y) {
     e.preventDefault();
-    const z = this.zoom;
     const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
-    const target = Math.min(5, Math.max(1, z.ts * Math.exp(-delta * (e.ctrlKey ? 0.01 : 0.002))));
-    // Le point sous le curseur reste immobile.
-    const fx = (x - this.frame.offsetLeft - z.tx) / z.ts, fy = (y - this.frame.offsetTop - z.ty) / z.ts;
-    z.ts = target;
-    z.tx = x - this.frame.offsetLeft - fx * target;
-    z.ty = y - this.frame.offsetTop - fy * target;
-    this.clampZoom();
-    this.animateZoom();
+    this.zoomBy(Math.exp(-delta * (e.ctrlKey ? 0.01 : 0.002)), x, y);
   }
 
-  /** Calque posé sur la page pendant le zoom : glisser pour se déplacer, molette pour zoomer. */
+  /** Multiplie le zoom par `factor` ; le point (x, y) reste immobile. */
+  zoomBy(factor, x, y, instant) {
+    const z = this.zoom;
+    if (x == null) [x, y] = this.pointer || [this.stage.clientWidth / 2, this.stage.clientHeight / 2];
+    const target = Math.min(5, Math.max(1, z.ts * factor));
+    if (target <= 1.001 && factor < 1) {
+      // Retour à 100 % : on recentre la page.
+      z.ts = 1; z.tx = 0; z.ty = 0;
+    } else {
+      const fx = (x - this.frame.offsetLeft - z.tx) / z.ts, fy = (y - this.frame.offsetTop - z.ty) / z.ts;
+      z.ts = target;
+      z.tx = x - this.frame.offsetLeft - fx * target;
+      z.ty = y - this.frame.offsetTop - fy * target;
+      this.clampZoom();
+    }
+    if (instant) { z.s = z.ts; z.x = z.tx; z.y = z.ty; this.applyZoom(); }
+    else this.animateZoom();
+  }
+
+  /** Calque posé sur la page pendant le zoom : glisser (souris ou doigt) pour déplacer, pincer pour zoomer. */
   makeShield() {
     const sh = document.createElement("div");
     sh.className = "zoom-shield";
     sh.hidden = true;
-    let last = null;
     sh.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0) return;
+      if (e.pointerType === "mouse" && e.button !== 0) return;
       sh.setPointerCapture(e.pointerId);
-      last = [e.clientX, e.clientY];
+      this.touchStart(e, e.clientX, e.clientY);
       sh.classList.add("dragging");
     });
-    sh.addEventListener("pointermove", (e) => {
-      if (!last) return;
-      this.pan(e.clientX - last[0], e.clientY - last[1]);
-      last = [e.clientX, e.clientY];
-    });
-    const end = () => { last = null; sh.classList.remove("dragging"); };
+    sh.addEventListener("pointermove", (e) => this.touchMove(e, e.clientX, e.clientY));
+    const end = (e) => { this.touchEnd(e); if (!this.touches.size) sh.classList.remove("dragging"); };
     sh.addEventListener("pointerup", end);
     sh.addEventListener("pointercancel", end);
     sh.addEventListener("dblclick", () => this.resetZoom());
@@ -586,24 +615,56 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
     this.shield = sh;
   }
 
+  /* Glisser à un doigt / à la souris = déplacer ; deux doigts = pincer pour zoomer. */
+  touchStart(e, x, y) {
+    const st = this.stage.getBoundingClientRect();
+    this.touches.set(e.pointerId, [x - st.left, y - st.top]);
+    this.pinch = null;
+  }
+
+  touchMove(e, x, y) {
+    const prev = this.touches.get(e.pointerId);
+    if (!prev) return false;
+    const st = this.stage.getBoundingClientRect();
+    const cur = [x - st.left, y - st.top];
+    this.touches.set(e.pointerId, cur);
+    const pts = [...this.touches.values()];
+    if (pts.length >= 2) {
+      const [a, b] = pts;
+      const dist = Math.hypot(a[0] - b[0], a[1] - b[1]), mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+      if (this.pinch) {
+        this.pan(mid[0] - this.pinch.mid[0], mid[1] - this.pinch.mid[1]);
+        this.zoomBy(dist / this.pinch.dist, mid[0], mid[1], true);
+      }
+      this.pinch = { dist: Math.max(1, dist), mid };
+      return true;
+    }
+    if (this.zoomed) { this.pan(cur[0] - prev[0], cur[1] - prev[1]); return true; }
+    return false;
+  }
+
+  touchEnd(e) {
+    this.touches.delete(e.pointerId);
+    if (this.touches.size < 2) this.pinch = null;
+  }
+
   pan(dx, dy) {
     const z = this.zoom;
-    z.tx += dx; z.ty += dy; z.x += dx; z.y += dy;
+    z.tx += dx; z.ty += dy;
     this.clampZoom();
     z.x = z.tx; z.y = z.ty;
     this.applyZoom();
   }
 
+  /** La page peut sortir en partie de l'écran (pour la placer où l'on veut), jamais complètement. */
   clampZoom() {
     const z = this.zoom, f = this.frame;
-    const sw = this.stage.clientWidth, sh = this.stage.clientHeight;
-    const clamp = (v, left, size, total) => {
-      const w = size * z.ts, lo = w >= total ? total - w : 0, hi = w >= total ? 0 : total - w;
-      return Math.min(hi, Math.max(lo, left + v)) - left;
+    const limit = (v, start, size, total) => {
+      const w = size * z.ts, m = Math.min(w, total) * 0.25;
+      return Math.min(total - m - start, Math.max(m - w - start, v));
     };
-    if (z.ts <= 1.001) { z.ts = 1; z.tx = 0; z.ty = 0; return; }
-    z.tx = clamp(z.tx, f.offsetLeft, f.offsetWidth, sw);
-    z.ty = clamp(z.ty, f.offsetTop, f.offsetHeight, sh);
+    z.tx = limit(z.tx, f.offsetLeft, f.offsetWidth, this.stage.clientWidth);
+    z.ty = limit(z.ty, f.offsetTop, f.offsetHeight, this.stage.clientHeight);
   }
 
   animateZoom() {
@@ -621,15 +682,16 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
 
   applyZoom() {
     const z = this.zoom;
-    this.frame.style.transform = z.s === 1 ? "" : `translate(${z.x}px, ${z.y}px) scale(${z.s})`;
+    const moved = z.s !== 1 || z.x !== 0 || z.y !== 0;
+    this.frame.style.transform = moved ? `translate(${z.x}px, ${z.y}px) scale(${z.s})` : "";
     if (!this.shield) this.makeShield();
-    this.shield.hidden = !(z.ts > 1);
-    this.opts.onZoom && this.opts.onZoom(z.ts);
+    this.shield.hidden = !this.zoomed;
+    this.opts.onZoom && this.opts.onZoom(z.ts, this.zoomed);
   }
 
   resetZoom(instant) {
     const z = this.zoom;
-    if (!z || (z.ts === 1 && z.s === 1)) return;
+    if (!z || (!this.zoomed && z.s === 1 && z.x === 0 && z.y === 0)) return;
     z.ts = 1; z.tx = 0; z.ty = 0;
     if (instant) {
       cancelAnimationFrame(this.zoomRaf);
@@ -639,7 +701,34 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
     } else this.animateZoom();
   }
 
-  get zoomed() { return this.zoom.ts > 1; }
+  /** Vue agrandie ou décalée. */
+  get zoomed() { const z = this.zoom; return z.ts > 1 || z.tx !== 0 || z.ty !== 0; }
+
+  /* Clavier : WASD déplace la page, ↑ / ↓ zooment, tant que la touche est enfoncée. */
+  hold(code, down) {
+    if (down) this.held.add(code);
+    else this.held.delete(code);
+    if (this.held.size && !this.holdRaf) {
+      let last = performance.now();
+      const tick = (now) => {
+        const dt = Math.min(0.05, Math.max(0, now - last) / 1000);
+        last = now;
+        const speed = 700 * dt;
+        let dx = 0, dy = 0;
+        if (this.held.has("KeyW")) dy -= speed;
+        if (this.held.has("KeyS")) dy += speed;
+        if (this.held.has("KeyA")) dx -= speed;
+        if (this.held.has("KeyD")) dx += speed;
+        if (dx || dy) this.pan(dx, dy);
+        if (this.held.has("ArrowUp")) this.zoomBy(Math.exp(1.2 * dt));
+        if (this.held.has("ArrowDown")) this.zoomBy(Math.exp(-1.2 * dt));
+        this.holdRaf = this.held.size ? requestAnimationFrame(tick) : 0;
+      };
+      this.holdRaf = requestAnimationFrame(tick);
+    }
+  }
+
+  releaseKeys() { this.held.clear(); }
 
   location() {
     const loc = { index: this.index, char: this.anchor.char };
@@ -738,6 +827,7 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
   destroy() {
     this.destroyed = true;
     cancelAnimationFrame(this.zoomRaf);
+    cancelAnimationFrame(this.holdRaf);
     this.loadToken++;
     if (this.resizer) this.resizer.disconnect();
     clearTimeout(this.resizeTimer);
