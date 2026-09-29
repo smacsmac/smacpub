@@ -257,7 +257,12 @@ select {
   border-bottom: 1px solid color-mix(in srgb, var(--page-fg) 10%, transparent);
   transition: opacity .25s ease, transform .25s ease;
 }
-.reader:not(.chrome) .reader-bar { opacity: 0; transform: translateY(-100%); pointer-events: none; }
+/* La barre et le pied de page restent visibles, sauf en plein écran (touche F). */
+.reader.immersive:not(.chrome) .reader-bar { opacity: 0; transform: translateY(-100%); pointer-events: none; }
+.reader.immersive:not(.chrome) .reader-foot { opacity: 0; }
+.reader.immersive:not(.chrome) .progress-track { pointer-events: none; }
+.reader.immersive .page-arrow { display: none; }
+.reader.immersive:not(.chrome) .zoom-pill { opacity: 0; pointer-events: none; }
 .r-title { flex: 1; min-width: 0; display: flex; flex-direction: column; line-height: 1.25; }
 .r-title strong { font: 600 14px var(--font-book); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .r-title span { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -268,6 +273,7 @@ select {
   display: flex; justify-content: space-between; align-items: center; gap: 16px;
   height: 44px; padding: 0 22px 4px; font-size: 12px; color: var(--muted);
   font-variant-numeric: tabular-nums; pointer-events: none;
+  transition: opacity .25s ease;
 }
 .reader-foot > span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #r-foot-left { min-width: 0; }

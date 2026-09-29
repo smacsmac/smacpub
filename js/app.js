@@ -91,7 +91,10 @@ function readerSettings() {
   const theme = resolvedTheme();
   const accent = (ACCENTS[s.accent] || ACCENTS.orange)[theme === "dark" ? 1 : 0];
   const colors = { ...THEME_COLORS[theme], link: accent, selection: `color-mix(in srgb, ${accent} 26%, transparent)` };
-  return { fontSize: s.fontSize, font: s.font, lineHeight: s.lineHeight, width: s.width, spread: s.spread, justify: s.justify, colors };
+  return {
+    fontSize: s.fontSize, font: s.font, lineHeight: s.lineHeight, width: s.width, spread: s.spread, justify: s.justify, colors,
+    immersive: !!Read.immersive,
+  };
 }
 
 function applyTheme() {
@@ -499,6 +502,7 @@ const Read = {
     this.reader = this.epub = this.book = this.loc = null;
     this.closeOverlays();
     this.hideReturn();
+    this.toggleImmersive(false);
     this.el.hidden = true;
     this.el.classList.remove("chrome");
     $("#r-zoom").hidden = true;
@@ -561,7 +565,21 @@ const Read = {
     else this.toggleChrome();
   },
 
-  /* --- Barre du haut (masquée pendant la lecture) --- */
+  /* --- Plein écran : on ne voit plus que la page (F ou Échap pour sortir) --- */
+  toggleImmersive(on = !this.immersive) {
+    if (on === !!this.immersive) return;
+    this.immersive = on;
+    this.el.classList.toggle("immersive", on);
+    const fs = document.fullscreenElement;
+    if (on && !fs && document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(() => {});
+    if (!on && fs && document.exitFullscreen) document.exitFullscreen().catch(() => {});
+    if (document.activeElement && document.activeElement.closest(".reader-bar") && this.reader) this.reader.focus();
+    if (on) this.hideChrome();
+    $("#r-full-btn use").setAttribute("href", on ? "#i-shrink" : "#i-expand");
+    if (this.reader) this.reader.setSettings(readerSettings());
+  },
+
+  /* --- Barre du haut (masquée seulement en plein écran) --- */
   showChrome(hideAfter) {
     this.el.classList.add("chrome");
     clearTimeout(this.chromeTimer);
@@ -724,7 +742,8 @@ function onKey(e) {
     case " ": if (onButton) return; e.shiftKey ? Read.prev() : Read.next(); break;
     case "t": case "T": Read.togglePanel("toc"); break;
     case "b": case "B": Read.toggleBookmark(); break;
-    case "f": case "F": case "/": Read.openPanel("search"); break;
+    case "r": case "R": case "/": Read.openPanel("search"); break;
+    case "f": case "F": Read.toggleImmersive(); break;
     case "+": case "=": Settings.set("fontSize", Math.min(36, Settings.data.fontSize + 1)); break;
     case "-": case "_": Settings.set("fontSize", Math.max(12, Settings.data.fontSize - 1)); break;
     case "0": Read.reader.resetZoom(); break;
@@ -735,7 +754,9 @@ function onKey(e) {
       break;
     case "Escape":
       if (Read.reader.zoomed) Read.reader.resetZoom();
-      else if (!Read.closeOverlays()) go("#/");
+      else if (Read.closeOverlays()) break;
+      else if (Read.immersive) Read.toggleImmersive(false);
+      else go("#/");
       break;
     default: return;
   }
@@ -887,6 +908,11 @@ function bind() {
   $("#r-toc-btn").addEventListener("click", () => Read.togglePanel("toc"));
   $("#r-search-btn").addEventListener("click", () => Read.togglePanel("search"));
   $("#r-bookmark-btn").addEventListener("click", () => Read.toggleBookmark());
+  $("#r-full-btn").addEventListener("click", () => Read.toggleImmersive());
+  // Sortie du plein écran par le navigateur (Échap, touche plein écran…) : on réaffiche l'interface.
+  document.addEventListener("fullscreenchange", () => {
+    if (!document.fullscreenElement && Read.immersive) Read.toggleImmersive(false);
+  });
   $("#r-type-btn").addEventListener("click", (e) => {
     e.stopPropagation();
     const pop = $("#r-typo");

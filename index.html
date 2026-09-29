@@ -45,6 +45,8 @@
     <symbol id="i-restart" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
     <symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></symbol>
     <symbol id="i-zoom-out" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M8 11h6"/></symbol>
+    <symbol id="i-expand" viewBox="0 0 24 24"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></symbol>
+    <symbol id="i-shrink" viewBox="0 0 24 24"><path d="M8 3v3a2 2 0 0 1-2 2H3"/><path d="M21 8h-3a2 2 0 0 1-2-2V3"/><path d="M3 16h3a2 2 0 0 1 2 2v3"/><path d="M16 21v-3a2 2 0 0 1 2-2h3"/></symbol>
     <symbol id="i-logo" viewBox="0 0 512 512"><path d="M248 172c-40-30-92-40-140-36v220c48-4 100 6 140 36z"/><path d="M264 172c40-30 92-40 140-36v220c-48-4-100 6-140 36z" opacity=".78"/></symbol>
   </svg>
 
@@ -119,8 +121,9 @@
       </div>
       <div class="r-actions">
         <button class="icon-btn" id="r-toc-btn" title="Sommaire (T)"><svg class="icon"><use href="#i-toc"/></svg></button>
-        <button class="icon-btn" id="r-search-btn" title="Rechercher (F)"><svg class="icon"><use href="#i-search"/></svg></button>
+        <button class="icon-btn" id="r-search-btn" title="Rechercher (R)"><svg class="icon"><use href="#i-search"/></svg></button>
         <button class="icon-btn" id="r-bookmark-btn" title="Signet (B)"><svg class="icon"><use href="#i-bookmark"/></svg></button>
+        <button class="icon-btn" id="r-full-btn" title="Plein écran (F)"><svg class="icon"><use href="#i-expand"/></svg></button>
         <button class="icon-btn" id="r-type-btn" title="Affichage"><svg class="icon"><use href="#i-type"/></svg></button>
       </div>
     </header>
@@ -259,13 +262,14 @@
           <dt><kbd>←</kbd> <kbd>Maj</kbd>+<kbd>Espace</kbd></dt><dd>Page précédente</dd>
           <dt><kbd>T</kbd></dt><dd>Sommaire</dd>
           <dt><kbd>B</kbd></dt><dd>Ajouter / retirer un signet</dd>
-          <dt><kbd>F</kbd> <kbd>/</kbd></dt><dd>Rechercher dans le livre</dd>
+          <dt><kbd>R</kbd> <kbd>/</kbd></dt><dd>Rechercher dans le livre</dd>
+          <dt><kbd>F</kbd></dt><dd>Plein écran : rien que la page (<kbd>F</kbd> ou <kbd>Échap</kbd> pour sortir)</dd>
           <dt><kbd>+</kbd> <kbd>−</kbd></dt><dd>Taille du texte</dd>
           <dt><kbd>1</kbd> <kbd>2</kbd></dt><dd>Une page / deux pages à la fois</dd>
           <dt>Molette <kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Zoomer / dézoomer vers le curseur</dd>
-          <dt><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></dt><dd>Déplacer la page (ou glisser avec la souris)</dd>
+          <dt><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></dt><dd>Déplacer la vue (ou glisser la page avec la souris)</dd>
           <dt><kbd>0</kbd></dt><dd>Taille et position normales</dd>
-          <dt><kbd>Échap</kbd></dt><dd>Fermer un menu, puis revenir à la bibliothèque</dd>
+          <dt><kbd>Échap</kbd></dt><dd>Fermer un menu, quitter le plein écran, puis revenir à la bibliothèque</dd>
         </dl>
       </details>
     </form>

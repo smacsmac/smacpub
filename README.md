@@ -24,6 +24,7 @@ Pas de compte, pas de serveur : vos livres et vos positions de lecture restent s
 - Une ou deux pages à la fois (automatique quand la fenêtre est assez large).
 - Zoom (molette, pincement, flèches ↑/↓), doux et centré sur le curseur ; la barre et les boutons ne sont pas agrandis.
   On déplace la page en la faisant glisser ou avec W A S D, même au-delà des bords ; le zoom est conservé d'une page à l'autre ; `0` ou `Échap` pour revenir.
+- Plein écran avec `F` (ou le bouton ⛶) : la barre et le pied de page disparaissent, la page prend toute la place. Hors plein écran, toute l'interface reste visible.
 - Thèmes clair, sépia et sombre, et une couleur d'accent au choix (orange, violet, bleu, vert, rose, ardoise) ; police « livre » (Literata, incluse), sans-serif ou celle de l'éditeur ; taille, interligne, largeur de colonne, texte justifié.
 
 **Vieux EPUB**
@@ -57,11 +58,12 @@ Tout fonctionne aussi, mais l'appli n'apparaît pas dans le lanceur.
 | `←` ou `Maj+Espace` | Page précédente |
 | `T` | Sommaire |
 | `B` | Ajouter / retirer un signet |
-| `F` ou `/` | Rechercher dans le livre |
+| `R` ou `/` | Rechercher dans le livre |
+| `F` | Plein écran : rien que la page (`F` ou `Échap` pour sortir) |
 | `+` / `−` | Taille du texte |
 | `1` / `2` | Une page / deux pages à la fois |
 | Molette, `↑` / `↓` | Zoomer / dézoomer vers le curseur |
-| `W` `A` `S` `D` | Déplacer la page (ou glisser avec la souris) |
+| `W` `A` `S` `D` | Déplacer la vue, comme dans un jeu (ou glisser la page avec la souris) |
 | `0` | Taille et position normales |
 | `Échap` | Fermer un menu, puis revenir à la bibliothèque |
 

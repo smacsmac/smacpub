@@ -136,10 +136,25 @@ class Reader {
   relayout() {
     return this.run(() => {
       if (!this.doc || this.index < 0) return;
+      // On garde le zoom : même niveau, même endroit de la page au centre de l'écran.
+      const z = this.zoom, f = this.frame;
+      const keep = this.zoomed && {
+        ts: z.ts,
+        fx: (this.stage.clientWidth / 2 - f.offsetLeft - z.tx) / (z.ts * f.offsetWidth),
+        fy: (this.stage.clientHeight / 2 - f.offsetTop - z.ty) / (z.ts * f.offsetHeight),
+      };
       this.resetZoom(true);
       this.layout();
       this.measure();
       this.setPage(this.pageOfAnchor(this.anchor), this.anchor);
+      if (keep) {
+        z.ts = keep.ts;
+        z.tx = this.stage.clientWidth / 2 - f.offsetLeft - keep.fx * keep.ts * f.offsetWidth;
+        z.ty = this.stage.clientHeight / 2 - f.offsetTop - keep.fy * keep.ts * f.offsetHeight;
+        this.clampZoom();
+        z.s = z.ts; z.x = z.tx; z.y = z.ty;
+        this.applyZoom();
+      }
     });
   }
 
@@ -156,7 +171,8 @@ class Reader {
     const textW = Math.max(160, Math.min(measure, (room - 2 * cols * pad) / cols));
     const colW = Math.round(textW + 2 * pad);
     const W = colW * cols; // largeur visible = une « page » (une ou deux colonnes)
-    const top = sh < 520 ? 44 : 64, bottom = sh < 520 ? 36 : 52;
+    // Plein écran : presque sans marges, rien que la page.
+    const top = s.immersive ? 12 : sh < 520 ? 44 : 64, bottom = s.immersive ? 12 : sh < 520 ? 36 : 52;
     const H = Math.max(160, sh - top - bottom);
     if (cols !== this.cols || W !== this.W) this.resetZoom(true);
     if (!this.spine) { this.spine = document.createElement("div"); this.spine.className = "spine"; this.stage.append(this.spine); }
@@ -704,7 +720,7 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
   /** Vue agrandie ou décalée. */
   get zoomed() { const z = this.zoom; return z.ts > 1 || z.tx !== 0 || z.ty !== 0; }
 
-  /* Clavier : WASD déplace la page, ↑ / ↓ zooment, tant que la touche est enfoncée. */
+  /* Clavier : WASD déplace la vue, ↑ / ↓ zooment, tant que la touche est enfoncée. */
   hold(code, down) {
     if (down) this.held.add(code);
     else this.held.delete(code);
@@ -715,10 +731,11 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
         last = now;
         const speed = 700 * dt;
         let dx = 0, dy = 0;
-        if (this.held.has("KeyW")) dy -= speed;
-        if (this.held.has("KeyS")) dy += speed;
-        if (this.held.has("KeyA")) dx -= speed;
-        if (this.held.has("KeyD")) dx += speed;
+        // Comme dans un jeu : W regarde vers le haut (la page descend), D vers la droite, etc.
+        if (this.held.has("KeyW")) dy += speed;
+        if (this.held.has("KeyS")) dy -= speed;
+        if (this.held.has("KeyA")) dx += speed;
+        if (this.held.has("KeyD")) dx -= speed;
         if (dx || dy) this.pan(dx, dy);
         if (this.held.has("ArrowUp")) this.zoomBy(Math.exp(1.2 * dt));
         if (this.held.has("ArrowDown")) this.zoomBy(Math.exp(-1.2 * dt));
