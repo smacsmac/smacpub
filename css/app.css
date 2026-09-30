@@ -247,7 +247,7 @@ select {
 .stage { position: absolute; inset: 0; touch-action: none; }
 .reader { touch-action: none; }
 .reader .panel, .reader .popover { touch-action: pan-y; }
-.book-frame { position: absolute; border: 0; background: transparent; transform-origin: 0 0; }
+.book-frame { position: absolute; z-index: 1; border: 0; background: transparent; transform-origin: 0 0; }
 
 .reader-bar {
   position: absolute; top: 0; left: 0; right: 0; z-index: 4;
@@ -327,7 +327,8 @@ select {
 }
 .reader.zoomed .reader-foot { background: var(--page-bg); }
 .reader.zoomed .spine { display: none; }
-.zoom-shield { position: absolute; inset: 0; z-index: 2; cursor: grab; touch-action: none; }
+/* Derrière la page : glisser dans les marges déplace la vue, le texte reste sélectionnable. */
+.zoom-shield { position: absolute; inset: 0; z-index: 0; cursor: grab; touch-action: none; }
 .zoom-shield.dragging { cursor: grabbing; }
 .zoom-pill {
   position: absolute; right: 16px; bottom: 54px; z-index: 3;
@@ -460,6 +461,8 @@ select {
 .keys dt { white-space: nowrap; }
 .keys dd { margin: 0; color: var(--muted); }
 .version { margin: 14px 0 0; text-align: right; }
+.switch-field { display: flex; align-items: center; justify-content: space-between; gap: 16px; cursor: pointer; }
+.switch-field > span { margin: 0 !important; }
 kbd {
   display: inline-block; min-width: 22px; padding: 1px 6px; border-radius: 6px; text-align: center;
   border: 1px solid var(--line); border-bottom-width: 2px; background: var(--bg); font: 12px/1.5 var(--font-ui);

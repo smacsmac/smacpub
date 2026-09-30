@@ -95,6 +95,19 @@ class Reader {
       this.zoomWheel(e, x - st.left, y - st.top);
     }, { passive: false });
     d.addEventListener("keyup", (e) => this.opts.onKeyUp && this.opts.onKeyUp(e));
+    // Glisser une image (ou n'importe où avec Ctrl) déplace la page ; glisser sur le texte le sélectionne.
+    d.addEventListener("mousedown", (e) => {
+      if (e.button !== 0 || !(e.ctrlKey || (e.target.closest && e.target.closest("img, svg, video")))) return;
+      e.preventDefault();
+      let last = [e.screenX, e.screenY];
+      const move = (ev) => {
+        this.pan(ev.screenX - last[0], ev.screenY - last[1]);
+        last = [ev.screenX, ev.screenY];
+      };
+      const stop = () => { d.removeEventListener("mousemove", move); d.removeEventListener("mouseup", stop); };
+      d.addEventListener("mousemove", move);
+      d.addEventListener("mouseup", stop);
+    });
     d.addEventListener("keydown", (e) => this.opts.onKey && this.opts.onKey(e));
     d.addEventListener("mousemove", (e) => {
       const st = this.stage.getBoundingClientRect(), [x, y] = screen(e);
@@ -228,6 +241,7 @@ pre { white-space: pre-wrap !important; }
 table { max-width: 100%; }
 a { color: ${t.link}; }
 .smac-full-image { display: block; margin: 0 auto; }
+img, svg, video { cursor: grab; -webkit-user-drag: none; }
 ::selection { background: ${t.selection}; }
 ::highlight(smac-search) { background-color: ${t.highlight}; color: inherit; }
 ${t.forceBg ? "html body *:not(img, svg, video) { background-color: transparent !important; }" : ""}
@@ -732,8 +746,9 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
         const speed = 700 * dt;
         let dx = 0, dy = 0;
         // La page suit la touche : W la fait monter, S descendre, A aller à gauche, D à droite.
-        if (this.held.has("KeyW")) dy -= speed;
-        if (this.held.has("KeyS")) dy += speed;
+        const up = this.settings.invertY ? speed : -speed; // option « Inverser W et S »
+        if (this.held.has("KeyW")) dy += up;
+        if (this.held.has("KeyS")) dy -= up;
         if (this.held.has("KeyA")) dx -= speed;
         if (this.held.has("KeyD")) dx += speed;
         if (dx || dy) this.pan(dx, dy);
