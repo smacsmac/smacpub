@@ -459,6 +459,7 @@ select {
 .keys { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; margin: 14px 0 0; font-size: 14px; }
 .keys dt { white-space: nowrap; }
 .keys dd { margin: 0; color: var(--muted); }
+.version { margin: 14px 0 0; text-align: right; }
 kbd {
   display: inline-block; min-width: 22px; padding: 1px 6px; border-radius: 6px; text-align: center;
   border: 1px solid var(--line); border-bottom-width: 2px; background: var(--bg); font: 12px/1.5 var(--font-ui);

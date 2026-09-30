@@ -63,7 +63,7 @@ Tout fonctionne aussi, mais l'appli n'apparaît pas dans le lanceur.
 | `+` / `−` | Taille du texte |
 | `1` / `2` | Une page / deux pages à la fois |
 | Molette, `↑` / `↓` | Zoomer / dézoomer vers le curseur |
-| `W` `A` `S` `D` | Déplacer la vue, comme dans un jeu (ou glisser la page avec la souris) |
+| `W` `A` `S` `D` | Déplacer la page : `W` vers le haut, `S` vers le bas, `A` à gauche, `D` à droite (ou la glisser avec la souris) |
 | `0` | Taille et position normales |
 | `Échap` | Fermer un menu, puis revenir à la bibliothèque |
 

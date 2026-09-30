@@ -720,7 +720,7 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
   /** Vue agrandie ou décalée. */
   get zoomed() { const z = this.zoom; return z.ts > 1 || z.tx !== 0 || z.ty !== 0; }
 
-  /* Clavier : WASD déplace la vue, ↑ / ↓ zooment, tant que la touche est enfoncée. */
+  /* Clavier : WASD déplace la page, ↑ / ↓ zooment, tant que la touche est enfoncée. */
   hold(code, down) {
     if (down) this.held.add(code);
     else this.held.delete(code);
@@ -731,11 +731,11 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
         last = now;
         const speed = 700 * dt;
         let dx = 0, dy = 0;
-        // Comme dans un jeu : W regarde vers le haut (la page descend), D vers la droite, etc.
-        if (this.held.has("KeyW")) dy += speed;
-        if (this.held.has("KeyS")) dy -= speed;
-        if (this.held.has("KeyA")) dx += speed;
-        if (this.held.has("KeyD")) dx -= speed;
+        // La page suit la touche : W la fait monter, S descendre, A aller à gauche, D à droite.
+        if (this.held.has("KeyW")) dy -= speed;
+        if (this.held.has("KeyS")) dy += speed;
+        if (this.held.has("KeyA")) dx -= speed;
+        if (this.held.has("KeyD")) dx += speed;
         if (dx || dy) this.pan(dx, dy);
         if (this.held.has("ArrowUp")) this.zoomBy(Math.exp(1.2 * dt));
         if (this.held.has("ArrowDown")) this.zoomBy(Math.exp(-1.2 * dt));
