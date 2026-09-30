@@ -1,7 +1,11 @@
 /* Smacpub — interface : bibliothèque, lecteur, réglages, sauvegarde. */
 "use strict";
 
-const $ = (sel, root = document) => root.querySelector(sel);
+// Le livre est affiché dans la même page : un id du livre ne doit jamais masquer un élément de l'appli.
+const $ = (sel, root = document) => {
+  for (const el of root.querySelectorAll(sel)) if (!el.closest("smac-root")) return el;
+  return null;
+};
 const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const pct = (p) => new Intl.NumberFormat("fr", { style: "percent", maximumFractionDigits: 0 }).format(Math.floor((p || 0) * 100) / 100);

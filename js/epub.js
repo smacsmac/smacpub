@@ -73,6 +73,23 @@ const EpubUtil = {
 
   clean(s) { return (s || "").replace(/\s+/g, " ").trim(); },
 
+  /** Le livre est affiché directement dans la page de l'appli : on retire tout ce qui pourrait
+      y agir (scripts, cadres, gestionnaires d'événements, liens javascript:, redirections…). */
+  sanitize(doc) {
+    const drop = /^(script|iframe|frame|frameset|embed|applet|base|meta|noembed|portal|fencedframe|animate|animatemotion|animatetransform|set|discard)$/i;
+    const dropAttr = /^(on.*|autofocus|autoplay|srcdoc|formaction|action|ping|http-equiv)$/i;
+    for (const el of [...doc.getElementsByTagName("*")]) {
+      if (!el.isConnected) continue;
+      if (drop.test(el.localName)) { el.remove(); continue; }
+      // <object> : on garde son contenu de remplacement (souvent une image).
+      if (el.localName === "object") { el.replaceWith(...[...el.childNodes].filter((c) => c.localName !== "param")); continue; }
+      for (const a of [...el.attributes]) {
+        const value = a.value.replace(/[\u0000-\u0020]/g, "");
+        if (dropAttr.test(a.localName) || /^(javascript|vbscript):/i.test(value)) el.removeAttributeNode(a);
+      }
+    }
+  },
+
   /** Nœuds texte d'un chapitre, dans l'ordre (hors <script>/<style>). Base commune au rendu et à la recherche. */
   textNodes(root) {
     const nodes = [];
@@ -366,12 +383,10 @@ class Epub {
       const url = await this.resourceUrl(r.path);
       return url ? `url("${url}")` : m;
     });
-    // Tailles de police absolues (pt, px) → rem : les réglages A−/A+ restent efficaces.
-    return css.replace(/(font-size\s*:\s*)([\d.]+)(pt|px)\b/gi, (m, prop, n, unit) =>
-      prop + (+(parseFloat(n) / (unit.toLowerCase() === "pt" ? 12 : 16)).toFixed(3)) + "rem");
+    return css; // unités et sélecteurs : adaptés au moment de l'affichage (BookCss, js/reader.js)
   }
 
-  /** Document d'un chapitre, nettoyé (sans scripts). Identique pour le rendu et la recherche. */
+  /** Document d'un chapitre, nettoyé (voir EpubUtil.sanitize). Identique pour le rendu et la recherche. */
   async chapterDocument(index) {
     const item = this.spine[index];
     let doc;
@@ -385,7 +400,7 @@ class Epub {
       const text = (await this.readText(item.path)) || "";
       doc = EpubUtil.parseHtml(text, /html?$/.test(item.type) && !/xhtml/.test(item.type));
     }
-    for (const el of [...doc.getElementsByTagName("script")]) el.remove();
+    EpubUtil.sanitize(doc);
     const walker = doc.createTreeWalker(doc.body || doc.documentElement, NodeFilter.SHOW_CDATA_SECTION | NodeFilter.SHOW_PROCESSING_INSTRUCTION);
     const odd = [];
     for (let n = walker.nextNode(); n; n = walker.nextNode()) odd.push(n);
@@ -446,8 +461,9 @@ class Epub {
         case "img": swap(el, "src"); el.removeAttribute("srcset"); el.removeAttribute("loading"); break;
         case "image": swap(el, "href", XLINK_NS); break;
         case "video": swap(el, "src"); swap(el, "poster"); break;
-        case "audio": case "source": case "track": swap(el, "src"); break;
-        case "a": {
+        case "audio": case "track": swap(el, "src"); break;
+        case "source": swap(el, "src"); el.removeAttribute("srcset"); break;
+        case "a": case "area": {
           const href = el.getAttribute("href") || el.getAttributeNS(XLINK_NS, "href");
           if (!href) break;
           const r = U.resolve(path, href);

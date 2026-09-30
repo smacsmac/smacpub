@@ -1,7 +1,112 @@
-/* Affichage paginé d'un EPUB dans une iframe isolée (colonnes CSS).
+/* Affichage paginé d'un EPUB (colonnes CSS), directement dans la page de l'appli.
+   Pas d'iframe : les extensions du navigateur (TransOver, dictionnaires…) lisent le texte
+   comme sur n'importe quel site. Les styles du livre sont confinés à <smac-root>, et ceux de
+   l'appli n'y entrent pas (@scope dans css/app.css).
    Une position est { index (chapitre), char (caractère dans le chapitre), media? } :
    elle ne dépend ni de la taille du texte ni de celle de la fenêtre. */
 "use strict";
+
+/* ---------- Feuilles de style du livre, confinées à <smac-root> ---------- */
+
+const BookCss = {
+  /** Découpe une liste de sélecteurs aux virgules (hors parenthèses, crochets et chaînes). */
+  split(text) {
+    const out = [];
+    let depth = 0, quote = null, start = 0;
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (quote) { if (c === "\\") i++; else if (c === quote) quote = null; continue; }
+      if (c === '"' || c === "'") quote = c;
+      else if (c === "\\") i++;
+      else if (c === "(" || c === "[") depth++;
+      else if (c === ")" || c === "]") depth--;
+      else if (c === "," && depth === 0) { out.push(text.slice(start, i)); start = i + 1; }
+    }
+    out.push(text.slice(start));
+    return out.map((s) => s.trim()).filter(Boolean);
+  },
+
+  /** Fin du premier sélecteur composé (avant un espace ou un combinateur). */
+  compoundEnd(s) {
+    let depth = 0, quote = null;
+    for (let i = 0; i < s.length; i++) {
+      const c = s[i];
+      if (quote) { if (c === "\\") i++; else if (c === quote) quote = null; continue; }
+      if (c === '"' || c === "'") quote = c;
+      else if (c === "\\") i++;
+      else if (c === "(" || c === "[") depth++;
+      else if (c === ")" || c === "]") depth--;
+      else if (depth === 0 && /[\s>+~]/.test(c)) return i;
+    }
+    return s.length;
+  },
+
+  /** html / :root → smac-root, body → smac-body, et tout le reste est placé sous smac-root.
+      Renvoie null pour un sélecteur qui ne peut rien viser dans le livre. */
+  scope(sel) {
+    let rest = sel.trim(), out = "smac-root", comb = " ";
+    let end = this.compoundEnd(rest), head = rest.slice(0, end);
+    const html = head.match(/^(?:html|:root)(?![\w-])/i);
+    if (html) {
+      out += head.slice(html[0].length);
+      rest = rest.slice(end);
+      const c = rest.match(/^\s*([>+~]?)\s*/);
+      rest = rest.slice(c[0].length);
+      if (!rest) return out;
+      if (c[1] === "+" || c[1] === "~") return null;
+      comb = c[1] ? " > " : " ";
+      end = this.compoundEnd(rest);
+      head = rest.slice(0, end);
+    }
+    const body = head.match(/^body(?![\w-])/i);
+    if (body) return out + comb + "smac-body" + head.slice(body[0].length) + rest.slice(end);
+    if (html && comb === " > ") return null; // html > x : seul <body> est affiché
+    return out + " " + rest;
+  },
+
+  /** Unités liées à la racine ou à la fenêtre → variables de la page (réglées par le lecteur).
+      Les tailles de police fixes (pt, px) deviennent relatives : A−/A+ restent efficaces. */
+  units(style) {
+    for (let i = 0; i < style.length; i++) {
+      const prop = style[i], v = style.getPropertyValue(prop);
+      if (!v || /url\(/i.test(v)) continue;
+      let nv = v.replace(/(-?(?:\d+\.?\d*|\.\d+))(rem|vh|vw|vmin|vmax)\b/gi, (m, n, u) => `calc(var(--smac-${u.toLowerCase()}) * ${n})`);
+      if (prop === "font-size") {
+        nv = nv.replace(/^\s*(\d+\.?\d*|\.\d+)(pt|px)\s*$/i, (m, n, u) =>
+          `calc(var(--smac-rem) * ${+(n / (u.toLowerCase() === "pt" ? 12 : 16)).toFixed(4)})`);
+      }
+      if (nv !== v) style.setProperty(prop, nv, style.getPropertyPriority(prop));
+    }
+  },
+
+  rules(list, parent) {
+    const has = (name) => typeof window[name] !== "undefined";
+    for (let i = list.length - 1; i >= 0; i--) {
+      const r = list[i];
+      if (r instanceof CSSStyleRule) {
+        const before = r.selectorText;
+        const parts = this.split(before).map((s) => this.scope(s)).filter(Boolean);
+        if (parts.length) r.selectorText = parts.join(", ");
+        // Sélecteur impossible à confiner : la règle est supprimée plutôt que de toucher l'appli.
+        if (!parts.length || r.selectorText === before) { parent.deleteRule(i); continue; }
+        this.units(r.style);
+      } else if (r instanceof CSSMediaRule || r instanceof CSSSupportsRule ||
+        (has("CSSContainerRule") && r instanceof CSSContainerRule) || (has("CSSLayerBlockRule") && r instanceof CSSLayerBlockRule)) {
+        this.rules(r.cssRules, r);
+      } else if (!(r instanceof CSSFontFaceRule || r instanceof CSSKeyframesRule || r instanceof CSSNamespaceRule ||
+        (has("CSSLayerStatementRule") && r instanceof CSSLayerStatementRule))) {
+        parent.deleteRule(i); // @page, @scope, @property… : inutiles ici
+      }
+    }
+  },
+
+  sheet(css) {
+    const sheet = new CSSStyleSheet();
+    try { sheet.replaceSync(css); } catch { /* feuille illisible : ignorée */ }
+    this.rules(sheet.cssRules, sheet);
+    return sheet;
+  },
+};
 
 class Reader {
   constructor(stage, epub, opts) {
@@ -19,6 +124,8 @@ class Reader {
     this.zoom = { s: 1, x: 0, y: 0, ts: 1, tx: 0, ty: 0 };
     this.touches = new Map();
     this.held = new Set();
+    this.bookSheets = [];
+    this.sheetCache = new Map();
     const lengths = opts.lengths && opts.lengths.length === epub.spine.length ? opts.lengths : null;
     this.prefix = [0];
     if (lengths) for (const n of lengths) this.prefix.push(this.prefix[this.prefix.length - 1] + n);
@@ -26,22 +133,20 @@ class Reader {
   }
 
   async init() {
-    const f = document.createElement("iframe");
-    f.className = "book-frame";
-    f.setAttribute("sandbox", "allow-same-origin"); // aucun script du livre ne s'exécute
-    f.setAttribute("title", "Contenu du livre");
-    f.srcdoc = '<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>';
-    const loaded = new Promise((r) => f.addEventListener("load", r, { once: true }));
-    this.stage.prepend(f);
-    await loaded;
-    this.frame = f;
-    this.doc = f.contentDocument;
-    this.win = f.contentWindow;
-    const fonts = this.doc.createElement("style");
-    fonts.textContent = window.SMAC_FONT_CSS || "";
-    this.userStyle = this.doc.createElement("style");
-    this.doc.head.append(fonts, this.userStyle);
-    this.range = this.doc.createRange();
+    const view = document.createElement("div");
+    view.className = "book-frame";
+    view.id = "smac-view";
+    view.setAttribute("role", "document");
+    view.setAttribute("aria-label", "Contenu du livre");
+    this.root = document.createElement("smac-root");
+    view.append(this.root);
+    this.stage.prepend(view);
+    this.frame = view;
+    this.userSheet = new CSSStyleSheet();
+    this.adopt();
+    this.range = document.createRange();
+    // Une extension (TransOver…) peut remplacer des nœuds texte (même texte) : on refera la liste.
+    this.observer = new MutationObserver(() => { this.stale = true; });
     this.bind();
     this.resizer = new ResizeObserver(() => {
       clearTimeout(this.resizeTimer);
@@ -50,33 +155,41 @@ class Reader {
     this.resizer.observe(this.stage);
   }
 
+  /** Feuilles du livre + réglages de lecture, ajoutées après celles de l'appli. */
+  adopt() {
+    const mine = new Set([...this.sheetCache.values(), this.userSheet]);
+    const others = document.adoptedStyleSheets.filter((s) => !mine.has(s));
+    document.adoptedStyleSheets = this.destroyed ? others : [...others, ...this.bookSheets, this.userSheet];
+  }
+
   bind() {
-    const d = this.doc;
-    const toStage = (e) => [e.clientX + this.frame.offsetLeft, e.clientY + this.frame.offsetTop];
-    d.addEventListener("click", (e) => {
-      const a = e.target.closest && e.target.closest("a");
+    const v = this.frame;
+    const stagePos = (e) => {
+      const st = this.stage.getBoundingClientRect();
+      return [e.clientX - st.left, e.clientY - st.top];
+    };
+    v.addEventListener("click", (e) => {
+      const a = e.target.closest && e.target.closest("a, area");
       if (a && (a.hasAttribute("data-smac-link") || a.hasAttribute("data-smac-external"))) {
         e.preventDefault();
         this.follow(a);
         return;
       }
       if (a) e.preventDefault();
-      if (!this.win.getSelection().isCollapsed || this.swiped || this.zoomed) return;
-      this.opts.onTap && this.opts.onTap(...toStage(e), this.pointerType);
+      if (!window.getSelection().isCollapsed || this.swiped || this.zoomed) return;
+      this.opts.onTap && this.opts.onTap(...stagePos(e), this.pointerType);
     });
-    // Position à l'écran d'un événement de la page (en tenant compte du zoom).
-    const screen = (e) => {
-      const r = this.frame.getBoundingClientRect();
-      return [r.left + e.clientX * this.zoom.s, r.top + e.clientY * this.zoom.s];
-    };
-    d.addEventListener("pointerdown", (e) => {
+    // Aucun lien ni formulaire du livre ne doit quitter l'appli.
+    v.addEventListener("auxclick", (e) => { if (e.target.closest && e.target.closest("a, area")) e.preventDefault(); });
+    v.addEventListener("submit", (e) => e.preventDefault(), true);
+    v.addEventListener("pointerdown", (e) => {
       this.pointerType = e.pointerType;
       this.swipeStart = [e.clientX, e.clientY];
       this.swiped = false;
-      if (e.pointerType !== "mouse") this.touchStart(e, ...screen(e));
+      if (e.pointerType !== "mouse") this.touchStart(e, e.clientX, e.clientY);
     });
-    d.addEventListener("pointermove", (e) => {
-      if (e.pointerType !== "mouse" && this.touchMove(e, ...screen(e))) this.swipeStart = null;
+    v.addEventListener("pointermove", (e) => {
+      if (e.pointerType !== "mouse" && this.touchMove(e, e.clientX, e.clientY)) this.swipeStart = null;
     });
     const up = (e) => {
       if (e.pointerType !== "mouse") this.touchEnd(e);
@@ -88,15 +201,10 @@ class Reader {
       }
       this.swipeStart = null;
     };
-    d.addEventListener("pointerup", up);
-    d.addEventListener("pointercancel", up);
-    d.addEventListener("wheel", (e) => {
-      const st = this.stage.getBoundingClientRect(), [x, y] = screen(e);
-      this.zoomWheel(e, x - st.left, y - st.top);
-    }, { passive: false });
-    d.addEventListener("keyup", (e) => this.opts.onKeyUp && this.opts.onKeyUp(e));
+    v.addEventListener("pointerup", up);
+    v.addEventListener("pointercancel", up);
     // Glisser une image (ou n'importe où avec Ctrl) déplace la page ; glisser sur le texte le sélectionne.
-    d.addEventListener("mousedown", (e) => {
+    v.addEventListener("mousedown", (e) => {
       if (e.button !== 0 || !(e.ctrlKey || (e.target.closest && e.target.closest("img, svg, video")))) return;
       e.preventDefault();
       let last = [e.screenX, e.screenY];
@@ -104,24 +212,15 @@ class Reader {
         this.pan(ev.screenX - last[0], ev.screenY - last[1]);
         last = [ev.screenX, ev.screenY];
       };
-      const stop = () => { d.removeEventListener("mousemove", move); d.removeEventListener("mouseup", stop); };
-      d.addEventListener("mousemove", move);
-      d.addEventListener("mouseup", stop);
+      const stop = () => { removeEventListener("mousemove", move); removeEventListener("mouseup", stop); };
+      addEventListener("mousemove", move);
+      addEventListener("mouseup", stop);
     });
-    d.addEventListener("keydown", (e) => this.opts.onKey && this.opts.onKey(e));
-    d.addEventListener("mousemove", (e) => {
-      const st = this.stage.getBoundingClientRect(), [x, y] = screen(e);
-      this.pointer = [x - st.left, y - st.top];
-      this.opts.onPointerMove && this.opts.onPointerMove(...toStage(e));
-    });
-    this.stage.addEventListener("mousemove", (e) => {
-      const st = this.stage.getBoundingClientRect();
-      this.pointer = [e.clientX - st.left, e.clientY - st.top];
-    });
-    this.win.addEventListener("scroll", () => {
-      const se = this.doc.scrollingElement;
-      if (Math.abs(se.scrollLeft - this.page * this.W) > 1) se.scrollLeft = this.page * this.W;
-      if (se.scrollTop) se.scrollTop = 0;
+    this.stage.addEventListener("mousemove", (e) => { this.pointer = stagePos(e); });
+    this.root.addEventListener("scroll", () => {
+      const r = this.root;
+      if (Math.abs(r.scrollLeft - this.page * this.W) > 1) r.scrollLeft = this.page * this.W;
+      if (r.scrollTop) r.scrollTop = 0;
     });
   }
 
@@ -148,7 +247,7 @@ class Reader {
 
   relayout() {
     return this.run(() => {
-      if (!this.doc || this.index < 0) return;
+      if (!this.body || this.index < 0) return;
       // On garde le zoom : même niveau, même endroit de la page au centre de l'écran.
       const z = this.zoom, f = this.frame;
       const keep = this.zoomed && {
@@ -200,53 +299,61 @@ class Reader {
       width: W + "px", height: H + "px", left: Math.round((sw - W) / 2) + "px", top: top + "px",
     });
     const css = this.css();
-    if (this.userStyle.textContent !== css) this.userStyle.textContent = css; // évite une remise en page inutile
+    if (css !== this.cssText) { this.cssText = css; this.userSheet.replaceSync(css); } // évite une remise en page inutile
   }
 
   measure() {
-    const columns = Math.max(1, Math.round(this.doc.scrollingElement.scrollWidth / this.colW));
+    const columns = Math.max(1, Math.round(this.root.scrollWidth / this.colW));
     this.pages = Math.ceil(columns / this.cols);
   }
 
+  /** Réglages de lecture. #smac-view (un id) l'emporte sur les styles du livre quand c'est voulu ;
+      :where(…) garde au contraire une priorité minimale (le livre peut alors la surcharger). */
   css() {
     const s = this.settings, t = s.colors, W = this.colW, H = this.H, P = this.pad;
     const family = { literata: '"Literata", Georgia, serif', sans: 'system-ui, Roboto, "Noto Sans", "Segoe UI", sans-serif' }[s.font];
+    const V = "#smac-view", B = `${V} smac-body`, soft = `:where(${V})`;
     return `
-html {
-  margin: 0 !important; padding: 0 ${P}px !important; border: 0 !important; box-sizing: content-box !important;
+:where(${V} > smac-root) { all: initial; }
+${V} > smac-root {
+  display: block !important; box-sizing: content-box !important; position: relative !important;
+  margin: 0 !important; padding: 0 ${P}px !important; border: 0 !important;
   width: auto !important; min-width: 0 !important; max-width: none !important;
   height: ${H}px !important; min-height: 0 !important; max-height: none !important;
   column-width: ${W - 2 * P}px !important; column-gap: ${2 * P}px !important; column-fill: auto !important;
   column-count: auto !important; column-rule: none !important;
-  overflow: hidden !important; writing-mode: horizontal-tb !important;
+  overflow: hidden !important; writing-mode: horizontal-tb !important; transform: none !important;
   font-size: ${s.fontSize}px !important; color: ${t.fg}; background: transparent !important;
-  color-scheme: ${t.dark ? "dark" : "light"}; -webkit-text-size-adjust: none; text-size-adjust: none;
-  overflow-wrap: break-word; touch-action: none;
+  --smac-rem: ${s.fontSize}px; --smac-vh: ${H / 100}px; --smac-vw: ${W / 100}px;
+  --smac-vmin: ${Math.min(W, H) / 100}px; --smac-vmax: ${Math.max(W, H) / 100}px;
+  -webkit-text-size-adjust: none; text-size-adjust: none; overflow-wrap: break-word;
+  touch-action: none; cursor: auto; user-select: text; -webkit-user-select: text;
 }
-body {
-  margin: 0 !important; padding: 0 !important; border: 0 !important;
+${B} {
+  display: block !important; margin: 0 !important; padding: 0 !important; border: 0 !important;
   width: auto !important; min-width: 0 !important; max-width: none !important;
   height: auto !important; min-height: 0 !important; max-height: none !important;
   overflow: visible !important; position: static !important; float: none !important;
   columns: auto !important; transform: none !important; background: transparent !important;
   line-height: ${s.lineHeight};
 }
-${family ? `html body, html body *:not(pre, code, kbd, samp, tt, pre *) { font-family: ${family} !important; }` : ""}
-html body p, html body li, html body blockquote, html body dd, html body div { line-height: ${s.lineHeight} !important; }
-${s.justify ? `html body p:not([align], [style*="text-align"], [class*="center"], [class*="right"]) { text-align: justify !important; -webkit-hyphens: auto; hyphens: auto; }` : ""}
-img, svg, video, canvas { max-width: 100% !important; max-height: ${H}px !important; object-fit: contain; box-sizing: border-box; }
-img, svg, figure, video, pre, tr { break-inside: avoid; }
-h1, h2, h3, h4, h5, h6 { break-after: avoid; }
-pre { white-space: pre-wrap !important; }
-table { max-width: 100%; }
-a { color: ${t.link}; }
-.smac-full-image { display: block; margin: 0 auto; }
-img, svg, video { cursor: grab; -webkit-user-drag: none; }
-::selection { background: ${t.selection}; }
+${family ? `${B}, ${B} *:not(pre, code, kbd, samp, tt, pre *) { font-family: ${family} !important; }` : ""}
+${B} p, ${B} li, ${B} blockquote, ${B} dd, ${B} div { line-height: ${s.lineHeight} !important; }
+${s.justify ? `${B} p:not([align], [style*="text-align"], [class*="center"], [class*="right"]) { text-align: justify !important; -webkit-hyphens: auto; hyphens: auto; }` : ""}
+${V} img, ${V} svg, ${V} video, ${V} canvas { max-width: 100% !important; max-height: ${H}px !important; }
+${soft} :is(img, svg, video, canvas) { object-fit: contain; box-sizing: border-box; }
+${soft} :is(img, svg, figure, video, pre, tr) { break-inside: avoid; }
+${soft} :is(h1, h2, h3, h4, h5, h6) { break-after: avoid; }
+${V} pre { white-space: pre-wrap !important; }
+${soft} table { max-width: 100%; }
+${soft} a { color: ${t.link}; }
+${soft} .smac-full-image { display: block; margin: 0 auto; }
+${soft} :is(img, svg, video) { cursor: grab; -webkit-user-drag: none; }
+${V} ::selection { background: ${t.selection}; }
 ::highlight(smac-search) { background-color: ${t.highlight}; color: inherit; }
-${t.forceBg ? "html body *:not(img, svg, video) { background-color: transparent !important; }" : ""}
-${t.forceColor ? `html body *:not(img, svg, video) { color: inherit !important; border-color: ${t.line} !important; }
-html body a, html body a * { color: ${t.link} !important; }` : ""}
+${t.forceBg ? `${B} *:not(img, svg, video) { background-color: transparent !important; }` : ""}
+${t.forceColor ? `${B}, ${B} *:not(img, svg, video) { color: inherit !important; border-color: ${t.line} !important; }
+${B} a, ${B} a * { color: ${t.link} !important; }` : ""}
 `;
   }
   /* ---------- Chargement d'un chapitre ---------- */
@@ -330,29 +437,32 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
         await this.prepare(index);
         if (token !== this.loadToken) return false;
       }
-      const ch = this.chapter, data = ch.data, p = ch.parts[part], d = this.doc;
+      const ch = this.chapter, data = ch.data, p = ch.parts[part], root = this.root;
       this.frame.style.visibility = "hidden";
-      for (const el of [...d.head.querySelectorAll("style[data-book]")]) el.remove();
-      for (const text of data.styles) {
-        const el = d.createElement("style");
-        el.setAttribute("data-book", "");
-        el.textContent = text;
-        d.head.insertBefore(el, this.userStyle);
-      }
-      const html = d.documentElement;
+      this.bookSheets = data.styles.map((css) => {
+        if (!this.sheetCache.has(css)) this.sheetCache.set(css, BookCss.sheet(css));
+        return this.sheetCache.get(css);
+      });
+      this.adopt();
       const lang = data.lang || this.opts.language;
-      lang ? html.setAttribute("lang", lang) : html.removeAttribute("lang");
-      data.dir ? html.setAttribute("dir", data.dir) : html.removeAttribute("dir");
-      html.className = data.htmlClass;
-      // <body> et enveloppes copiés sans leur contenu, puis les nœuds de la partie.
+      lang ? root.setAttribute("lang", lang) : root.removeAttribute("lang");
+      data.dir ? root.setAttribute("dir", data.dir) : root.removeAttribute("dir");
+      data.htmlClass ? root.setAttribute("class", data.htmlClass) : root.removeAttribute("class");
+      // <body> du livre → <smac-body> (mêmes attributs), puis les enveloppes et les nœuds de la partie.
       const chain = [];
       for (let el = ch.container; el; el = el === ch.body ? null : el.parentElement) chain.unshift(el);
-      const body = d.importNode(chain[0], false);
+      const body = document.createElement("smac-body");
+      for (const a of chain[0].attributes) {
+        try { body.setAttributeNS(a.namespaceURI, a.name, a.value); } catch { /* attribut invalide */ }
+      }
       let cur = body;
-      for (const el of chain.slice(1)) cur = cur.appendChild(d.importNode(el, false));
-      for (let i = p.a; i < p.b; i++) cur.appendChild(d.importNode(ch.kids[i], true));
-      html.replaceChild(body, d.body);
-      if (this.win.CSS && this.win.CSS.highlights) this.win.CSS.highlights.clear();
+      for (const el of chain.slice(1)) cur = cur.appendChild(document.importNode(el, false));
+      for (let i = p.a; i < p.b; i++) cur.appendChild(document.importNode(ch.kids[i], true));
+      for (const el of [body, ...body.querySelectorAll("[style]")]) if (el.style && el.style.length) BookCss.units(el.style);
+      this.observer.disconnect();
+      root.replaceChildren(body);
+      this.body = body;
+      if (window.CSS && CSS.highlights) CSS.highlights.delete("smac-search");
       this.index = index;
       this.part = part;
       this.base = p.base;
@@ -362,6 +472,7 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
       if (token !== this.loadToken) return false;
       this.collect();
       this.measure();
+      this.observer.observe(body, { childList: true, subtree: true, characterData: true });
       this.frame.style.visibility = "";
       return true;
     } finally {
@@ -371,13 +482,14 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
   }
 
   settle() {
-    const pending = [...this.doc.images].filter((i) => !i.complete).map((i) => i.decode().catch(() => {}));
+    const pending = [...this.body.querySelectorAll("img")].filter((i) => !i.complete).map((i) => i.decode().catch(() => {}));
     const timeout = new Promise((r) => setTimeout(r, 3000));
-    return Promise.race([Promise.all([Promise.all(pending), this.doc.fonts.ready]), timeout]);
+    return Promise.race([Promise.all([Promise.all(pending), document.fonts.ready]), timeout]);
   }
 
   collect() {
-    const nodes = EpubUtil.textNodes(this.doc.body);
+    this.stale = false;
+    const nodes = EpubUtil.textNodes(this.body);
     const starts = new Array(nodes.length);
     const vis = [];
     let pos = 0;
@@ -390,8 +502,11 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
     this.starts = starts;
     this.vis = vis;
     this.length = pos; // longueur de la partie affichée
-    this.media = [...this.doc.body.querySelectorAll("img, svg, video")].filter((el) => !el.parentElement.closest("svg"));
+    this.media = [...this.body.querySelectorAll("img, svg, video")].filter((el) => !el.parentElement.closest("svg"));
   }
+
+  /** Refait la liste des nœuds texte si une extension a touché au texte affiché. */
+  fresh() { if (this.stale && this.body) this.collect(); }
 
   isLastPart() { return this.part === this.chapter.parts.length - 1; }
 
@@ -408,7 +523,10 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
 
   /* ---------- Géométrie : caractère ↔ page (positions locales à la partie) ---------- */
 
-  scrollX() { return this.doc.scrollingElement.scrollLeft; }
+  /** Abscisse dans la page (sans zoom, défilement compris) d'un rectangle mesuré à l'écran. */
+  localX(rc) {
+    return (rc.left - this.root.getBoundingClientRect().left) / this.zoom.s + this.root.scrollLeft;
+  }
 
   pageAtX(x) { return Math.min(this.pages - 1, Math.max(0, Math.floor(x / this.W))); }
 
@@ -420,14 +538,14 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
       if (o < 0 || o >= len) break;
       r.setStart(node, o);
       r.setEnd(node, o + 1);
-      for (const rc of r.getClientRects()) if (rc.height > 0) return this.pageAtX(rc.left + this.scrollX());
+      for (const rc of r.getClientRects()) if (rc.height > 0) return this.pageAtX(this.localX(rc));
     }
     return null;
   }
 
   elementPage(el) {
     const rc = el.getClientRects()[0];
-    return rc ? this.pageAtX(rc.left + this.scrollX()) : null;
+    return rc ? this.pageAtX(this.localX(rc)) : null;
   }
 
   /** Premier caractère situé sur la page p ou après (recherche dichotomique). */
@@ -506,18 +624,20 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
   }
 
   findFrag(frag) {
-    return this.doc.getElementById(frag) || this.doc.getElementsByName(frag)[0] || null;
+    const q = frag.replace(/["\\]/g, "\\$&");
+    return this.body.querySelector(`[id="${q}"], [name="${q}"]`);
   }
 
   /** Range DOM pour un intervalle (positions du chapitre), dans la partie affichée. */
   rangeFor(start, end) {
+    this.fresh();
     if (!this.nodes.length) return null;
     const at = (c) => {
       c = Math.min(Math.max(0, c - this.base), this.length);
       const i = this.nodeIndexAt(c);
       return [this.nodes[i], Math.min(c - this.starts[i], this.nodes[i].data.length)];
     };
-    const r = this.doc.createRange();
+    const r = document.createRange();
     r.setStart(...at(start));
     r.setEnd(...at(end));
     return r;
@@ -526,7 +646,11 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
   /* ---------- Navigation ---------- */
 
   run(fn) {
-    this.queue = this.queue.then(() => (this.destroyed ? null : fn())).catch((err) => {
+    this.queue = this.queue.then(() => {
+      if (this.destroyed) return null;
+      this.fresh();
+      return fn();
+    }).catch((err) => {
       console.error(err);
       this.opts.onError && this.opts.onError(err);
     });
@@ -568,7 +692,7 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
   setPage(p, anchor) {
     this.page = p;
     this.anchor = anchor;
-    this.doc.scrollingElement.scrollLeft = p * this.W;
+    this.root.scrollLeft = p * this.W;
     this.emit();
   }
 
@@ -596,7 +720,7 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
   }
 
   /* ---------- Zoom et déplacement de la vue ----------
-     La page (l'iframe) est agrandie par une transformation CSS ; la barre, le pied de page
+     La page (#smac-view) est agrandie par une transformation CSS ; la barre, le pied de page
      et les boutons restent à leur taille normale. Coordonnées x, y : dans la scène. */
 
   /** Molette ou pincement du pavé tactile (ctrl + molette). */
@@ -833,17 +957,16 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
   async showResult(r) {
     await this.display({ index: r.index, char: r.start });
     const range = this.rangeFor(r.start, r.end);
-    if (range && this.win.Highlight && this.win.CSS.highlights) {
-      this.win.CSS.highlights.set("smac-search", new this.win.Highlight(range));
-    }
+    if (range && window.Highlight && CSS.highlights) CSS.highlights.set("smac-search", new Highlight(range));
   }
 
   clearHighlight() {
-    if (this.win && this.win.CSS && this.win.CSS.highlights) this.win.CSS.highlights.delete("smac-search");
+    if (window.CSS && CSS.highlights) CSS.highlights.delete("smac-search");
   }
 
   /** Extrait de texte à partir d'un caractère du chapitre (pour les signets). */
   textFrom(start, max) {
+    this.fresh();
     if (!this.nodes.length) return "";
     let out = "";
     const local = Math.max(0, start - this.base);
@@ -854,10 +977,16 @@ html body a, html body a * { color: ${t.link} !important; }` : ""}
     return out.length > max ? out.slice(0, max).replace(/\s+\S*$/, "") + "…" : out;
   }
 
-  focus() { if (this.win) this.win.focus(); }
+  /** Rend le clavier au lecteur (un bouton de la barre ne garde pas le focus). */
+  focus() {
+    const a = document.activeElement;
+    if (a && a !== document.body && a.blur) a.blur();
+  }
 
   destroy() {
     this.destroyed = true;
+    this.adopt();
+    if (this.observer) this.observer.disconnect();
     cancelAnimationFrame(this.zoomRaf);
     cancelAnimationFrame(this.holdRaf);
     this.loadToken++;

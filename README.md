@@ -30,7 +30,14 @@ Pas de compte, pas de serveur : vos livres et vos positions de lecture restent s
 **Vieux EPUB**
 - EPUB 2 (NCX) et EPUB 3 (nav), HTML mal formé, encodages anciens (ISO-8859-1, Windows-1252…), métadonnées manquantes.
 - Les chapitres très longs (un livre entier dans un seul fichier) sont découpés à l'affichage pour rester rapides.
-- Les scripts éventuellement présents dans un livre ne s'exécutent jamais.
+- Les scripts éventuellement présents dans un livre ne s'exécutent jamais (ils sont retirés, comme les liens `javascript:`).
+
+**Extensions du navigateur (TransOver, dictionnaires…)**
+- Le texte du livre est affiché directement dans la page : les extensions qui traduisent ou définissent
+  un mot au survol ou à la sélection fonctionnent comme sur n'importe quel site.
+- Si vous ouvrez Smacpub **depuis un fichier** (`smacpub.html`), Chrome demande une autorisation :
+  `chrome://extensions` → l'extension (par ex. TransOver) → **Détails** → activer **« Autoriser l'accès aux URL de fichier »**.
+  Ce n'est pas nécessaire avec la version installée depuis GitHub Pages.
 
 ## Installer sur le Chromebook
 
