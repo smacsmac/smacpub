@@ -158,9 +158,32 @@ async function makeThumb(blob) {
   }
 }
 
+const BOOK_FILE = /\.(epub|cbz|cbr)$/i;
+const BOOK_TYPES = ["application/epub+zip", "application/vnd.comicbook+zip", "application/vnd.comicbook-rar", "application/x-cbz", "application/x-cbr"];
+
+/** Ouvre un fichier ajouté : un EPUB, ou une BD (CBZ ; CBR converti en ZIP, le fichier d'origine restant intact). */
+async function openBookFile(file, buffer, onStep) {
+  const kind = ComicUtil.kind(new Uint8Array(buffer, 0, Math.min(8, buffer.byteLength)));
+  const ext = ((file.name.match(/\.(\w+)$/) || [])[1] || "").toLowerCase();
+  if (kind === "7z") throw new Error("les BD au format 7-Zip (.cb7) ne sont pas prises en charge");
+  if (kind === "rar") {
+    const zip = await ComicUtil.rarToZip(buffer, (n, total) => onStep(`Décompression de « ${file.name} » : ${n} / ${total}…`));
+    return { format: "comic", doc: await Comic.open(zip), stored: zip };
+  }
+  if (kind !== "zip") throw new Error("format de fichier non reconnu");
+  if (ext !== "cbz" && ext !== "cbr") {
+    try {
+      return { format: "epub", doc: await Epub.open(buffer), stored: new Blob([buffer], { type: "application/epub+zip" }) };
+    } catch (err) {
+      if (ext === "epub") throw err; // sinon : peut-être une BD rangée dans un ZIP
+    }
+  }
+  return { format: "comic", doc: await Comic.open(buffer), stored: new Blob([buffer], { type: "application/vnd.comicbook+zip" }) };
+}
+
 async function importFiles(fileList) {
-  const files = [...fileList].filter((f) => /\.epub$/i.test(f.name) || f.type === "application/epub+zip");
-  if (!files.length) { toast("Seuls les fichiers .epub peuvent être ajoutés.", "error"); return []; }
+  const files = [...fileList].filter((f) => BOOK_FILE.test(f.name) || BOOK_TYPES.includes(f.type));
+  if (!files.length) { toast("Seuls les fichiers .epub, .cbz et .cbr peuvent être ajoutés.", "error"); return []; }
   const progress = toast(files.length > 1 ? `Ajout de ${files.length} livres…` : `Ajout de « ${files[0].name} »…`, "", 0);
   const ids = [];
   let added = 0, already = 0;
@@ -172,13 +195,15 @@ async function importFiles(fileList) {
       const id = await hashId(buffer);
       ids.push(id);
       if (await DB.get("books", id)) { already++; continue; }
-      const epub = await Epub.open(buffer);
+      const { format, doc: epub, stored } = await openBookFile(file, buffer, (msg) => progress.set(msg));
       const md = epub.metadata;
       const cover = await makeThumb(await epub.coverBlob().catch(() => null));
       const lengths = await epub.lengths();
       await DB.addBook({
         id,
-        title: md.title || file.name.replace(/\.epub$/i, "").replace(/[_]+/g, " "),
+        format,
+        pages: format === "comic" ? epub.pageCount : undefined,
+        title: md.title || file.name.replace(BOOK_FILE, "").replace(/[_]+/g, " ").trim(),
         author: md.authors.join(", "),
         language: md.language,
         publisher: md.publisher,
@@ -188,12 +213,12 @@ async function importFiles(fileList) {
         addedAt: Date.now(),
         cover,
         lengths,
-      }, new Blob([buffer], { type: "application/epub+zip" }));
+      }, stored);
       epub.destroy();
       added++;
     } catch (err) {
       console.error(file.name, err);
-      failed.push(file.name);
+      failed.push(`${file.name} (${String((err && err.message) || err).slice(0, 120)})`);
     }
   }
   progress.close();
@@ -307,6 +332,7 @@ const Library = {
     $("#grid").innerHTML = list.map((b) => {
       const s = b.state, p = this.progress(b);
       let meta;
+      const tag = b.format === "comic" ? `<span class="tag">BD</span>` : "";
       if (s.finished) meta = `<span class="done">✓ Terminé</span>`;
       else if (s.lastReadAt) meta = `<span>${pct(p)}</span><span>·</span><span>${ago(s.lastReadAt)}</span>`;
       else meta = Date.now() - b.addedAt < 7 * 86400000 ? `<span class="new">Nouveau</span>` : `<span>Pas commencé</span>`;
@@ -316,7 +342,7 @@ const Library = {
             ${this.coverHtml(b)}
             <h3>${esc(b.title)}</h3>
             <p class="author">${esc(b.author) || "&nbsp;"}</p>
-            <div class="meta">${meta}</div>
+            <div class="meta">${tag}${meta}</div>
           </button>
           ${s.favorite ? `<span class="fav-badge" title="Favori"><svg class="icon"><use href="#i-star"/></svg></span>` : ""}
           <button class="icon-btn card-more" data-menu="${b.id}" aria-label="Options" aria-haspopup="menu"><svg class="icon"><use href="#i-more"/></svg></button>
@@ -451,7 +477,9 @@ const Read = {
     $("#r-loading").hidden = false;
     updateThemeColor();
     try {
-      this.epub = await Epub.open(file);
+      this.comic = book.format === "comic";
+      this.el.classList.toggle("comic", this.comic);
+      this.epub = await (this.comic ? Comic : Epub).open(file);
     } catch (err) {
       console.error(err);
       toast("Impossible d’ouvrir ce livre : " + err.message, "error", 6000);
@@ -467,6 +495,7 @@ const Read = {
     });
     this.reader = new Reader($("#r-stage"), this.epub, {
       settings: readerSettings(),
+      comic: this.comic,
       lengths: book.lengths,
       toc,
       language: book.language,
@@ -528,17 +557,29 @@ const Read = {
     s.progress = loc.progress;
     s.lastReadAt = Date.now();
     if (loc.atEnd && loc.via === "next") s.finished = true; // arrivé au bout en lisant (pas via un lien vers les notes)
-    const entry = this.epub.toc[loc.tocIndex];
-    s.chapter = entry ? entry.label : "";
+    let tocIndex = loc.tocIndex;
+    if (this.comic) {
+      // BD : on compte en pages (« Page 4–5 sur 48 ») ; le sommaire suit la page affichée.
+      const c = this.epub, seen = loc.mediaOnPage.length ? loc.mediaOnPage : [loc.media || 0];
+      const first = c.pageNumber(loc.index, seen[0]), last = c.pageNumber(loc.index, seen[seen.length - 1]);
+      tocIndex = -1;
+      c.toc.forEach((e, i) => { if (+e.frag.slice(6) <= first) tocIndex = i; });
+      const folder = c.toc.length < c.pageCount && c.toc[tocIndex] ? c.toc[tocIndex].label : "";
+      s.chapter = folder ? `${folder} · page ${first}` : `Page ${first}`;
+      $("#r-foot-left").textContent = (folder ? folder + " · " : "") + `Page ${first === last ? first : first + "–" + last} sur ${c.pageCount}`;
+      $("#r-foot-right").textContent = pct(loc.progress);
+    } else {
+      const entry = this.epub.toc[tocIndex];
+      s.chapter = entry ? entry.label : "";
+      $("#r-foot-left").textContent = s.chapter;
+      const left = loc.pagesLeft;
+      const pagesLeft = loc.single ? ""
+        : left <= 0 ? `Dernière page<span class="long"> du chapitre</span> · `
+        : `${plural(left, "page restante", "pages restantes")}<span class="long"> dans ce chapitre</span> · `;
+      $("#r-foot-right").innerHTML = pagesLeft + pct(loc.progress);
+    }
     DB.put("state", s).catch((err) => console.error(err));
-
     $("#r-chapter").textContent = s.chapter || this.book.author || "";
-    $("#r-foot-left").textContent = s.chapter;
-    const left = loc.pagesLeft;
-    const pagesLeft = loc.single ? ""
-      : left <= 0 ? `Dernière page<span class="long"> du chapitre</span> · `
-      : `${plural(left, "page restante", "pages restantes")}<span class="long"> dans ce chapitre</span> · `;
-    $("#r-foot-right").innerHTML = pagesLeft + pct(loc.progress);
     $("#r-progress .progress-fill").style.width = (loc.progress * 100).toFixed(2) + "%";
     const marked = !!this.bookmarkHere();
     $("#r-bookmark-btn").classList.toggle("on", marked);
@@ -548,7 +589,7 @@ const Read = {
       const f = this.reader.frame;
       ribbon.style.left = f.offsetLeft + f.offsetWidth - this.reader.pad - 24 + "px";
     }
-    for (const b of $$("#r-toc button")) b.classList.toggle("current", +b.dataset.toc === loc.tocIndex);
+    for (const b of $$("#r-toc button")) b.classList.toggle("current", +b.dataset.toc === tocIndex);
   },
 
   /* --- Navigation --- */
@@ -608,6 +649,7 @@ const Read = {
 
   /* --- Panneaux --- */
   openPanel(tab) {
+    if (tab === "search" && this.comic) return; // une BD n'a pas de texte à chercher
     $("#r-typo").hidden = true;
     $("#r-panel").classList.add("open");
     $("#r-scrim").hidden = false;
@@ -660,7 +702,7 @@ const Read = {
       const b = {
         id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
         index: l.index, char: l.start, chapter: s.chapter || this.chapterLabels[l.index] || "",
-        text: this.reader.textFrom(l.start, 140) || "Illustration", progress: l.progress, createdAt: Date.now(),
+        text: this.comic ? "" : this.reader.textFrom(l.start, 140) || "Illustration", progress: l.progress, createdAt: Date.now(),
       };
       if (l.media != null) b.media = l.media;
       s.bookmarks.push(b);
@@ -677,7 +719,7 @@ const Read = {
       <li>
         <button class="mark-open" data-mark="${b.id}">
           <span class="mark-chapter"><svg class="icon sm"><use href="#i-bookmark"/></svg>${esc(b.chapter || "Signet")} · ${pct(b.progress)}</span>
-          <span class="mark-text">« ${esc(b.text)} »</span>
+          ${b.text ? `<span class="mark-text">« ${esc(b.text)} »</span>` : ""}
           <span class="mark-date">${ago(b.createdAt)}</span>
         </button>
         <button class="icon-btn mark-del" data-del="${b.id}" title="Supprimer ce signet"><svg class="icon sm"><use href="#i-trash"/></svg></button>

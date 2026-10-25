@@ -1,6 +1,6 @@
 /* Service worker : met l'application en cache pour qu'elle fonctionne sans connexion.
    Stratégie : réponse immédiate depuis le cache, mise à jour discrète en arrière-plan. */
-const CACHE = "smacpub-v8";
+const CACHE = "smacpub-v9";
 const ASSETS = [
   "./",
   "index.html",
@@ -8,6 +8,8 @@ const ASSETS = [
   "js/fonts.js",
   "js/zip.js",
   "js/epub.js",
+  "js/comic.js",
+  "js/unrar.js",
   "js/db.js",
   "js/reader.js",
   "js/app.js",

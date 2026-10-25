@@ -168,7 +168,7 @@
           <button data-value="dark" class="swatch dark" title="Sombre">Aa</button>
         </div>
       </div>
-      <div class="typo-row">
+      <div class="typo-row text-only">
         <span class="typo-label">Taille</span>
         <div class="stepper">
           <button id="font-smaller" title="Plus petit (−)">A−</button>
@@ -176,7 +176,7 @@
           <button id="font-bigger" title="Plus grand (+)">A+</button>
         </div>
       </div>
-      <div class="typo-row">
+      <div class="typo-row text-only">
         <span class="typo-label">Police</span>
         <div class="segmented" data-setting="font">
           <button data-value="literata" class="f-literata">Livre</button>
@@ -184,7 +184,7 @@
           <button data-value="original">Éditeur</button>
         </div>
       </div>
-      <div class="typo-row">
+      <div class="typo-row text-only">
         <span class="typo-label">Interligne</span>
         <div class="segmented" data-setting="lineHeight">
           <button data-value="1.35">Serré</button>
@@ -200,7 +200,7 @@
           <button data-value="two">Deux</button>
         </div>
       </div>
-      <div class="typo-row">
+      <div class="typo-row text-only">
         <span class="typo-label">Largeur</span>
         <div class="segmented" data-setting="width">
           <button data-value="narrow">Étroite</button>
@@ -208,7 +208,7 @@
           <button data-value="wide">Large</button>
         </div>
       </div>
-      <label class="typo-row switch-row">
+      <label class="typo-row switch-row text-only">
         <span class="typo-label">Texte justifié</span>
         <input type="checkbox" id="justify" class="switch">
       </label>
@@ -283,7 +283,7 @@
           <dt><kbd>Échap</kbd></dt><dd>Fermer un menu, quitter le plein écran, puis revenir à la bibliothèque</dd>
         </dl>
       </details>
-      <p class="version muted small">Smacpub — version 8</p>
+      <p class="version muted small">Smacpub — version 9</p>
     </form>
   </dialog>
 
@@ -301,13 +301,14 @@
   <div id="menu" class="popover menu" hidden></div>
   <div id="toasts" class="toasts" aria-live="polite"></div>
   <div id="drop" class="drop" hidden><div><svg class="icon"><use href="#i-upload"/></svg><p>Déposez vos EPUB ici</p></div></div>
-  <input type="file" id="file-input" accept=".epub,application/epub+zip" multiple hidden>
+  <input type="file" id="file-input" accept=".epub,.cbz,.cbr,application/epub+zip,application/vnd.comicbook+zip,application/vnd.comicbook-rar" multiple hidden>
   <input type="file" id="cover-input" accept="image/*" hidden>
   <input type="file" id="backup-input" accept=".json,application/json" hidden>
 
   <script src="js/fonts.js"></script>
   <script src="js/zip.js"></script>
   <script src="js/epub.js"></script>
+  <script src="js/comic.js"></script>
   <script src="js/db.js"></script>
   <script src="js/reader.js"></script>
   <script src="js/app.js"></script>

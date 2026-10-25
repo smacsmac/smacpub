@@ -1,7 +1,7 @@
 {
   "name": "Smacpub — ma bibliothèque EPUB",
   "short_name": "Smacpub",
-  "description": "Un lecteur EPUB simple, élégant et 100 % hors-ligne.",
+  "description": "Un lecteur EPUB et BD (CBZ, CBR) simple, élégant et 100 % hors-ligne.",
   "lang": "fr",
   "start_url": "./",
   "scope": "./",
@@ -9,16 +9,45 @@
   "background_color": "#f7f5f1",
   "theme_color": "#f7f5f1",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" },
-    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
   ],
   "file_handlers": [
     {
       "action": "./",
-      "accept": { "application/epub+zip": [".epub"] }
+      "accept": {
+        "application/epub+zip": [
+          ".epub"
+        ],
+        "application/vnd.comicbook+zip": [
+          ".cbz"
+        ],
+        "application/vnd.comicbook-rar": [
+          ".cbr"
+        ]
+      }
     }
   ],
-  "launch_handler": { "client_mode": "focus-existing" }
+  "launch_handler": {
+    "client_mode": "focus-existing"
+  }
 }

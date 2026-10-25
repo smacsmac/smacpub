@@ -274,13 +274,14 @@ class Reader {
     const s = this.settings;
     const sw = this.stage.clientWidth, sh = this.stage.clientHeight;
     const compact = sw < 700;
-    const pad = compact ? 20 : 28;
+    const comic = !!this.opts.comic; // BD : les pages prennent toute la place et se touchent en double page
+    const pad = comic ? 0 : compact ? 20 : 28;
     const measure = s.fontSize * ({ narrow: 28, medium: 34, wide: 44 }[s.width] || 34);
     const room = sw - (compact ? 0 : 112);
     // Double page : forcée, ou automatique si la fenêtre est assez large (paysage).
     const fitsTwo = room >= 2 * (s.fontSize * 24 + 2 * pad) && sw > sh * 1.15;
     const cols = compact ? 1 : s.spread === "two" ? 2 : s.spread === "one" ? 1 : fitsTwo ? 2 : 1;
-    const textW = Math.max(160, Math.min(measure, (room - 2 * cols * pad) / cols));
+    const textW = Math.max(160, comic ? (room - 2 * cols * pad) / cols : Math.min(measure, (room - 2 * cols * pad) / cols));
     const colW = Math.round(textW + 2 * pad);
     const W = colW * cols; // largeur visible = une « page » (une ou deux colonnes)
     // Plein écran : presque sans marges, rien que la page.
@@ -291,6 +292,7 @@ class Reader {
     this.spine.hidden = cols !== 2;
     Object.assign(this.spine.style, { left: Math.round((sw - W) / 2) + colW + "px", top: top + "px", height: H + "px" });
     this.cols = cols;
+    this.root.setAttribute("data-cols", cols);
     this.colW = colW;
     this.W = W;
     this.H = H;
@@ -903,6 +905,7 @@ ${B} a, ${B} a * { color: ${t.link} !important; }` : ""}
     const target = fraction * this.total;
     let i = 0;
     while (i < this.epub.spine.length - 1 && this.prefix[i + 1] <= target) i++;
+    if (this.opts.comic) return { index: i, char: 0, media: Math.floor(target - this.prefix[i]) }; // BD : en pages
     return { index: i, char: Math.round(target - this.prefix[i]), snap: true };
   }
 
@@ -927,7 +930,7 @@ ${B} a, ${B} a * { color: ${t.link} !important; }` : ""}
       ...this.location(),
       start, end, mediaOnPage, atEnd, tocIndex, pagesLeft, via: this.via || "jump",
       single: this.pages === 1 && this.chapter.parts.length === 1,
-      progress: atEnd ? 1 : this.progressAt(this.index, Math.min(this.anchor.char, this.chapter.length)),
+      progress: atEnd ? 1 : this.progressAt(this.index, this.opts.comic ? (mediaOnPage[0] || 0) : Math.min(this.anchor.char, this.chapter.length)),
     });
   }
 
