@@ -134,7 +134,7 @@
       <div id="r-progress" class="progress-track" title="Aller à…"><div class="progress-fill"></div><span class="progress-tip" hidden></span></div>
     </footer>
 
-    <button id="r-zoom" class="zoom-pill" hidden title="Revenir à la taille normale (0)"><svg class="icon sm"><use href="#i-zoom-out"/></svg><span>100 %</span></button>
+    <button id="r-zoom" class="zoom-pill" hidden title="Revenir à la taille normale (Échap)"><svg class="icon sm"><use href="#i-zoom-out"/></svg><span>100 %</span></button>
     <button id="r-return" class="return-pill" hidden><svg class="icon sm"><use href="#i-undo"/></svg><span>Revenir</span></button>
 
     <div id="r-scrim" class="scrim" hidden></div>
@@ -196,9 +196,19 @@
         <span class="typo-label">Pages</span>
         <div class="segmented" data-setting="spread">
           <button data-value="auto" title="Deux pages si la fenêtre est assez large">Auto</button>
-          <button data-value="one">Une</button>
-          <button data-value="two">Deux</button>
+          <button data-value="one" title="Une page à la fois (9)">Une</button>
+          <button data-value="two" title="Deux pages à la fois (0)">Deux</button>
         </div>
+      </div>
+      <div class="typo-row views-row">
+        <span class="typo-label">Vues</span>
+        <div class="segmented" id="r-views">
+          <button data-view="1">1</button>
+          <button data-view="2">2</button>
+          <button data-view="3">3</button>
+          <button data-view="4">4</button>
+        </div>
+        <p class="typo-hint"><kbd>Maj</kbd> + <kbd>1</kbd> à <kbd>4</kbd> mémorise le zoom et la position (pour tout le livre) ; <kbd>1</kbd> à <kbd>4</kbd> y revient.</p>
       </div>
       <div class="typo-row text-only">
         <span class="typo-label">Largeur</span>
@@ -280,14 +290,14 @@
           <dt><kbd>R</kbd> <kbd>/</kbd></dt><dd>Rechercher dans le livre</dd>
           <dt><kbd>F</kbd></dt><dd>Plein écran : rien que la page (<kbd>F</kbd> ou <kbd>Échap</kbd> pour sortir)</dd>
           <dt><kbd>+</kbd> <kbd>−</kbd></dt><dd>Taille du texte</dd>
-          <dt><kbd>1</kbd> <kbd>2</kbd></dt><dd>Une page / deux pages à la fois</dd>
+          <dt><kbd>9</kbd> <kbd>0</kbd></dt><dd>Une page / deux pages à la fois</dd>
           <dt>Molette <kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Zoomer / dézoomer vers le curseur</dd>
           <dt><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></dt><dd>Déplacer la page : <kbd>W</kbd> vers le haut, <kbd>S</kbd> vers le bas, <kbd>A</kbd> à gauche, <kbd>D</kbd> à droite (ou glisser une image, les marges, ou n'importe où avec <kbd>Ctrl</kbd>)</dd>
-          <dt><kbd>0</kbd></dt><dd>Taille et position normales</dd>
-          <dt><kbd>Échap</kbd></dt><dd>Fermer un menu, quitter le plein écran, puis revenir à la bibliothèque</dd>
+          <dt><kbd>1</kbd> à <kbd>4</kbd></dt><dd>Aller à une vue mémorisée (zoom + position) ; <kbd>Maj</kbd> + <kbd>1</kbd> à <kbd>4</kbd> pour mémoriser la vue actuelle. Chaque livre a ses vues, valables sur toutes ses pages.</dd>
+          <dt><kbd>Échap</kbd></dt><dd>Taille et position normales, fermer un menu, quitter le plein écran, puis revenir à la bibliothèque</dd>
         </dl>
       </details>
-      <p class="version muted small">Smacpub — version 10</p>
+      <p class="version muted small">Smacpub — version 11</p>
     </form>
   </dialog>
 

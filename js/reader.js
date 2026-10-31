@@ -860,6 +860,30 @@ ${B} a, ${B} a * { color: ${t.link} !important; }` : ""}
   /** Vue agrandie ou décalée. */
   get zoomed() { const z = this.zoom; return z.ts > 1 || z.tx !== 0 || z.ty !== 0; }
 
+  /* Vues mémorisées (touches 1 à 4) : le zoom et le point de la page au centre de l'écran,
+     mesuré depuis le centre de la page. Valables pour toutes les pages du livre.
+     En BD, l'unité est la hauteur de la page (les planches y sont ajustées) : la vue reste
+     la même avec ou sans plein écran. */
+  viewUnit() { return this.opts.comic ? this.frame.offsetHeight : 1; }
+
+  getView() {
+    const z = this.zoom, f = this.frame, u = this.viewUnit();
+    const px = (this.stage.clientWidth / 2 - f.offsetLeft - z.tx) / z.ts;
+    const py = (this.stage.clientHeight / 2 - f.offsetTop - z.ty) / z.ts;
+    const round = (v) => Math.round(v * 1e4) / 1e4;
+    return { x: round((px - f.offsetWidth / 2) / u), y: round((py - f.offsetHeight / 2) / u), zoom: round(z.ts * u) };
+  }
+
+  setView(v) {
+    const z = this.zoom, f = this.frame, u = this.viewUnit();
+    z.ts = Math.min(5, Math.max(1, v.zoom / u));
+    z.tx = this.stage.clientWidth / 2 - f.offsetLeft - (f.offsetWidth / 2 + v.x * u) * z.ts;
+    z.ty = this.stage.clientHeight / 2 - f.offsetTop - (f.offsetHeight / 2 + v.y * u) * z.ts;
+    this.clampZoom();
+    if (z.ts < 1.001 && Math.abs(z.tx) < 1 && Math.abs(z.ty) < 1) { z.ts = 1; z.tx = 0; z.ty = 0; }
+    this.animateZoom();
+  }
+
   /* Clavier : WASD déplace la page, ↑ / ↓ zooment, tant que la touche est enfoncée. */
   hold(code, down) {
     if (down) this.held.add(code);

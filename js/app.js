@@ -521,6 +521,7 @@ const Read = {
     if (opening !== this.opening) return;
     this.renderToc();
     this.renderBookmarks();
+    this.renderViews();
     $("#r-search").value = "";
     $("#r-results").innerHTML = "";
     $("#r-search-status").textContent = "";
@@ -729,6 +730,31 @@ const Read = {
       : `<li class="panel-empty">Aucun signet pour l’instant.<br>Appuyez sur <kbd>B</kbd> ou sur l’icône signet pour marquer une page.</li>`;
   },
 
+  /* --- Vues mémorisées : zoom + position, propres à chaque livre, pour toutes ses pages --- */
+  saveView(n) {
+    if (!this.reader) return;
+    const s = this.state;
+    s.views = Array.isArray(s.views) ? s.views : [];
+    s.views[n - 1] = this.reader.getView();
+    DB.put("state", s).catch((err) => console.error(err));
+    this.renderViews();
+    toast(`Vue ${n} mémorisée (zoom ${Math.round(this.reader.zoom.ts * 100)} %) : touche ${n} pour y revenir.`, "", 2200);
+  },
+
+  goView(n) {
+    const v = this.reader && (this.state.views || [])[n - 1];
+    if (v && [v.x, v.y, v.zoom].every(Number.isFinite)) this.reader.setView(v);
+    else if (this.reader) toast(`Vue ${n} vide : réglez le zoom et la position, puis Maj + ${n} pour la mémoriser.`, "", 3000);
+  },
+
+  renderViews() {
+    for (const b of $$("#r-views button")) {
+      const n = +b.dataset.view, saved = !!(this.state.views || [])[n - 1];
+      b.classList.toggle("saved", saved);
+      b.title = saved ? `Aller à la vue ${n} (touche ${n}) · Maj + clic pour la remplacer` : `Mémoriser la vue actuelle (Maj + ${n})`;
+    }
+  },
+
   /* --- Recherche --- */
   async search(query) {
     const token = ++this.searchToken;
@@ -762,6 +788,12 @@ const Read = {
 
 const HOLD_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown"];
 
+function setSpread(two) {
+  Settings.set("spread", two ? "two" : "one");
+  if (!two) toast("Une page à la fois", "", 1500);
+  else toast(Read.reader.stage.clientWidth < 700 ? "Fenêtre trop étroite pour deux pages" : "Deux pages à la fois", "", 1500);
+}
+
 function onKeyUp(e) {
   if (Read.reader && HOLD_KEYS.includes(e.code)) Read.reader.hold(e.code, false);
 }
@@ -786,6 +818,10 @@ function onKey(e) {
     Read.reader.hold(e.code, true);
     return;
   }
+  // Chiffres (position physique, aussi en AZERTY) : 1 à 4 = vues mémorisées (Maj pour mémoriser), 9 / 0 = une / deux pages.
+  const digit = /^(?:Digit|Numpad)(\d)$/.exec(e.code), n = digit ? +digit[1] : -1;
+  if (n >= 1 && n <= 4) { e.preventDefault(); e.shiftKey ? Read.saveView(n) : Read.goView(n); return; }
+  if (n === 9 || n === 0) { e.preventDefault(); setSpread(n === 0); return; }
   switch (e.key) {
     case "ArrowRight": case "PageDown": Read.next(); break;
     case "ArrowLeft": case "PageUp": Read.prev(); break;
@@ -796,12 +832,6 @@ function onKey(e) {
     case "f": case "F": Read.toggleImmersive(); break;
     case "+": case "=": Settings.set("fontSize", Math.min(36, Settings.data.fontSize + 1)); break;
     case "-": case "_": Settings.set("fontSize", Math.max(12, Settings.data.fontSize - 1)); break;
-    case "0": Read.reader.resetZoom(); break;
-    case "1": Settings.set("spread", "one"); toast("Une page à la fois", "", 1500); break;
-    case "2":
-      Settings.set("spread", "two");
-      toast(Read.reader.stage.clientWidth < 700 ? "Fenêtre trop étroite pour deux pages" : "Deux pages à la fois", "", 1500);
-      break;
     case "Escape":
       if (Read.reader.zoomed) Read.reader.resetZoom();
       else if (Read.closeOverlays()) break;
@@ -859,6 +889,7 @@ async function importBackup(file) {
     if ((inc.lastReadAt || 0) > (cur.lastReadAt || 0)) {
       for (const k of ["location", "progress", "lastReadAt", "finished", "chapter", "favorite"]) if (k in inc) merged[k] = inc[k];
     } else if (merged.favorite === undefined && inc.favorite) merged.favorite = true;
+    if (Array.isArray(inc.views) && (!Array.isArray(cur.views) || (inc.lastReadAt || 0) > (cur.lastReadAt || 0))) merged.views = inc.views;
     const known = new Set((cur.bookmarks || []).map((b) => b.id));
     merged.bookmarks = [...(cur.bookmarks || []), ...(Array.isArray(inc.bookmarks) ? inc.bookmarks : []).filter((b) => b && !known.has(b.id))];
     await DB.put("state", merged);
@@ -1064,6 +1095,13 @@ function bind() {
     Read.reader.zoomWheel(e, e.clientX - r.left, e.clientY - r.top);
   }, { passive: false });
   $("#r-zoom").addEventListener("click", () => Read.reader && Read.reader.resetZoom());
+  $("#r-views").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-view]");
+    if (!b || !Read.reader) return;
+    const n = +b.dataset.view;
+    if (e.shiftKey || !(Read.state.views || [])[n - 1]) Read.saveView(n);
+    else Read.goView(n);
+  });
   Read.el.addEventListener("mousemove", (e) => Read.pointer(e.clientY));
 
   window.addEventListener("keydown", onKey);

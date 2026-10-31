@@ -1,6 +1,6 @@
 /* Service worker : met l'application en cache pour qu'elle fonctionne sans connexion.
    Stratégie : réponse immédiate depuis le cache, mise à jour discrète en arrière-plan. */
-const CACHE = "smacpub-v10";
+const CACHE = "smacpub-v11";
 const ASSETS = [
   "./",
   "index.html",

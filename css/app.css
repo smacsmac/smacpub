@@ -409,6 +409,12 @@
   .typo-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; }
   .typo-row + .typo-row { border-top: 1px solid var(--line); }
   .typo-label { font-size: 13px; color: var(--muted); }
+  .views-row { flex-wrap: wrap; row-gap: 6px; }
+  .typo-hint { flex-basis: 100%; margin: 0; font-size: 12px; line-height: 1.5; color: var(--muted); }
+  .typo-hint kbd { font-size: 11px; }
+  #r-views button { min-width: 38px; }
+  #r-views button.saved { color: var(--accent); font-weight: 700; }
+  #r-views button.saved::after { content: ""; display: block; width: 4px; height: 4px; margin: 1px auto 0; border-radius: 50%; background: currentColor; }
   .swatches { display: flex; gap: 8px; }
   .swatch { width: 44px; height: 34px; border-radius: 10px; border: 2px solid transparent; font: 600 14px var(--font-book); }
   .swatch.light { background: #fcfbf8; color: #25221e; border-color: #e4dfd6; }
