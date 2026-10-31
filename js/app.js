@@ -36,7 +36,7 @@ function toast(message, type = "", ms = 3500) {
 
 const Settings = {
   KEY: "smacpub:settings",
-  DEFAULTS: { theme: "auto", accent: "orange", font: "literata", fontSize: 19, lineHeight: 1.6, width: "medium", spread: "auto", justify: true, invertY: false, name: "" },
+  DEFAULTS: { theme: "auto", accent: "orange", font: "literata", fontSize: 19, lineHeight: 1.6, width: "medium", spread: "auto", justify: true, invertY: false, invertX: false, name: "" },
   data: null,
   load() {
     let saved = {};
@@ -54,6 +54,7 @@ const Settings = {
     if (["narrow", "medium", "wide"].includes(s.width)) out.width = s.width;
     if (typeof s.justify === "boolean") out.justify = s.justify;
     if (typeof s.invertY === "boolean") out.invertY = s.invertY;
+    if (typeof s.invertX === "boolean") out.invertX = s.invertX;
     if (typeof s.name === "string") out.name = s.name.slice(0, 40);
     return out;
   },
@@ -97,7 +98,7 @@ function readerSettings() {
   const accent = (ACCENTS[s.accent] || ACCENTS.orange)[theme === "dark" ? 1 : 0];
   const colors = { ...THEME_COLORS[theme], link: accent, selection: `color-mix(in srgb, ${accent} 26%, transparent)` };
   return {
-    fontSize: s.fontSize, font: s.font, lineHeight: s.lineHeight, width: s.width, spread: s.spread, justify: s.justify, invertY: s.invertY, colors,
+    fontSize: s.fontSize, font: s.font, lineHeight: s.lineHeight, width: s.width, spread: s.spread, justify: s.justify, invertY: s.invertY, invertX: s.invertX, colors,
     immersive: !!Read.immersive,
   };
 }
@@ -123,6 +124,7 @@ function syncControls() {
   $("#font-size-val").textContent = s.fontSize;
   $("#justify").checked = s.justify;
   $("#invert-y").checked = s.invertY;
+  $("#invert-x").checked = s.invertX;
 }
 
 /* ================= Import ================= */
@@ -973,6 +975,7 @@ function bind() {
   $("#font-bigger").addEventListener("click", () => Settings.set("fontSize", Math.min(36, Settings.data.fontSize + 1)));
   $("#justify").addEventListener("change", (e) => Settings.set("justify", e.target.checked));
   $("#invert-y").addEventListener("change", (e) => Settings.set("invertY", e.target.checked));
+  $("#invert-x").addEventListener("change", (e) => Settings.set("invertX", e.target.checked));
   $("#r-prev").addEventListener("click", (e) => { e.stopPropagation(); Read.prev(); });
   $("#r-next").addEventListener("click", (e) => { e.stopPropagation(); Read.next(); });
   $("#r-scrim").addEventListener("click", () => Read.closeOverlays());

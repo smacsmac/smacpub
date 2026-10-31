@@ -873,10 +873,11 @@ ${B} a, ${B} a * { color: ${t.link} !important; }` : ""}
         let dx = 0, dy = 0;
         // La page suit la touche : W la fait monter, S descendre, A aller à gauche, D à droite.
         const up = this.settings.invertY ? speed : -speed; // option « Inverser W et S »
+        const right = this.settings.invertX ? -speed : speed; // option « Inverser A et D »
         if (this.held.has("KeyW")) dy += up;
         if (this.held.has("KeyS")) dy -= up;
-        if (this.held.has("KeyA")) dx -= speed;
-        if (this.held.has("KeyD")) dx += speed;
+        if (this.held.has("KeyA")) dx -= right;
+        if (this.held.has("KeyD")) dx += right;
         if (dx || dy) this.pan(dx, dy);
         if (this.held.has("ArrowUp")) this.zoomBy(Math.exp(1.2 * dt));
         if (this.held.has("ArrowDown")) this.zoomBy(Math.exp(-1.2 * dt));
