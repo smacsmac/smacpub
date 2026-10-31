@@ -786,7 +786,7 @@ const Read = {
 
 /* ================= Clavier ================= */
 
-const HOLD_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown"];
+const HOLD_KEYS = ["KeyW", "KeyA", "KeyS", "KeyD", "KeyQ", "KeyE", "ArrowUp", "ArrowDown"];
 
 function setSpread(two) {
   Settings.set("spread", two ? "two" : "one");
@@ -795,7 +795,9 @@ function setSpread(two) {
 }
 
 function onKeyUp(e) {
-  if (Read.reader && HOLD_KEYS.includes(e.code)) Read.reader.hold(e.code, false);
+  if (!Read.reader) return;
+  Read.reader.fine = e.shiftKey;
+  if (HOLD_KEYS.includes(e.code)) Read.reader.hold(e.code, false);
 }
 
 function onKey(e) {
@@ -803,6 +805,7 @@ function onKey(e) {
     if (e.key === "Escape") Library.closeMenu();
     return;
   }
+  Read.reader.fine = e.shiftKey;
   const tag = e.target && e.target.tagName;
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
     if (e.key === "Escape") { e.preventDefault(); e.target.blur(); Read.closeOverlays(); }
@@ -812,7 +815,7 @@ function onKey(e) {
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "f") { e.preventDefault(); Read.openPanel("search"); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const onButton = tag === "BUTTON";
-  // WASD (position physique des touches, aussi en AZERTY) : déplacer la page ; ↑ / ↓ : zoomer.
+  // WASD (position physique des touches, aussi en AZERTY) : déplacer la page ; E / ↑ et Q / ↓ : zoomer.
   if (HOLD_KEYS.includes(e.code)) {
     e.preventDefault();
     Read.reader.hold(e.code, true);

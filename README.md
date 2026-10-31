@@ -22,7 +22,7 @@ Pas de compte, pas de serveur : vos livres et vos positions de lecture restent s
 - Liens internes (notes de bas de page…) avec un bouton « Revenir ».
 - Barre de progression cliquable pour sauter n'importe où dans le livre.
 - Une ou deux pages à la fois (automatique quand la fenêtre est assez large).
-- Zoom (molette, pincement, flèches ↑/↓), doux et centré sur le curseur ; la barre et les boutons ne sont pas agrandis.
+- Zoom (molette, pincement, `E`/`Q` ou flèches ↑/↓), doux et centré sur le curseur, plus fin en tenant `Maj` ; la barre et les boutons ne sont pas agrandis.
   On déplace la page en la faisant glisser ou avec W A S D, même au-delà des bords ; le zoom est conservé d'une page à l'autre ; `Échap` pour revenir.
 - **Vues mémorisées** : jusqu'à 4 par livre, chacune garde le zoom et la position (`Maj` + `1` à `4` pour mémoriser, `1` à `4` pour y aller).
   Elles servent sur toutes les pages du livre : en BD, par exemple, une vue en haut à gauche et une autre en bas à droite, à rappeler à chaque page.
@@ -88,7 +88,7 @@ Il suffit de l'ouvrir avec Chrome.
 | `+` / `−` | Taille du texte |
 | `9` / `0` | Une page / deux pages à la fois |
 | `1` à `4` | Aller à une vue mémorisée (zoom + position) ; `Maj` + `1` à `4` pour mémoriser la vue actuelle |
-| Molette, `↑` / `↓` | Zoomer / dézoomer vers le curseur |
+| Molette, `E` / `Q`, `↑` / `↓` | Zoomer / dézoomer vers le curseur (`E` ou `↑` zoome, `Q` ou `↓` dézoome) ; avec `Maj`, plus finement |
 | `W` `A` `S` `D` | Déplacer la page : `W` vers le haut, `S` vers le bas, `A` à gauche, `D` à droite (ou glisser une image, les marges, ou n'importe où avec `Ctrl` ; options dans ⚙ pour inverser W et S, ou A et D) |
 | `Échap` | Taille et position normales, fermer un menu, puis revenir à la bibliothèque |
 

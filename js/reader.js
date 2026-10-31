@@ -124,6 +124,7 @@ class Reader {
     this.zoom = { s: 1, x: 0, y: 0, ts: 1, tx: 0, ty: 0 };
     this.touches = new Map();
     this.held = new Set();
+    this.fine = false; // Maj enfoncée : zoom plus fin
     this.bookSheets = [];
     this.sheetCache = new Map();
     const lengths = opts.lengths && opts.lengths.length === epub.spine.length ? opts.lengths : null;
@@ -728,8 +729,10 @@ ${B} a, ${B} a * { color: ${t.link} !important; }` : ""}
   /** Molette ou pincement du pavé tactile (ctrl + molette). */
   zoomWheel(e, x, y) {
     e.preventDefault();
-    const delta = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
-    this.zoomBy(Math.exp(-delta * (e.ctrlKey ? 0.01 : 0.002)), x, y);
+    // Avec Maj : zoom quatre fois plus fin (Chrome envoie alors la molette en horizontal).
+    const d = e.shiftKey && !e.deltaY ? e.deltaX : e.deltaY;
+    const delta = d * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
+    this.zoomBy(Math.exp(-delta * (e.ctrlKey ? 0.01 : 0.002) * (e.shiftKey ? 0.25 : 1)), x, y);
   }
 
   /** Multiplie le zoom par `factor` ; le point (x, y) reste immobile. */
@@ -884,7 +887,7 @@ ${B} a, ${B} a * { color: ${t.link} !important; }` : ""}
     this.animateZoom();
   }
 
-  /* Clavier : WASD déplace la page, ↑ / ↓ zooment, tant que la touche est enfoncée. */
+  /* Clavier : WASD déplace la page, E / ↑ et Q / ↓ zooment (finement avec Maj), tant que la touche est enfoncée. */
   hold(code, down) {
     if (down) this.held.add(code);
     else this.held.delete(code);
@@ -903,15 +906,16 @@ ${B} a, ${B} a * { color: ${t.link} !important; }` : ""}
         if (this.held.has("KeyA")) dx -= right;
         if (this.held.has("KeyD")) dx += right;
         if (dx || dy) this.pan(dx, dy);
-        if (this.held.has("ArrowUp")) this.zoomBy(Math.exp(1.2 * dt));
-        if (this.held.has("ArrowDown")) this.zoomBy(Math.exp(-1.2 * dt));
+        const rate = this.fine ? 0.3 : 1.2;
+        if (this.held.has("ArrowUp") || this.held.has("KeyE")) this.zoomBy(Math.exp(rate * dt));
+        if (this.held.has("ArrowDown") || this.held.has("KeyQ")) this.zoomBy(Math.exp(-rate * dt));
         this.holdRaf = this.held.size ? requestAnimationFrame(tick) : 0;
       };
       this.holdRaf = requestAnimationFrame(tick);
     }
   }
 
-  releaseKeys() { this.held.clear(); }
+  releaseKeys() { this.held.clear(); this.fine = false; }
 
   location() {
     const loc = { index: this.index, char: this.anchor.char };
