@@ -124,7 +124,7 @@ class Reader {
     this.zoom = { s: 1, x: 0, y: 0, ts: 1, tx: 0, ty: 0 };
     this.touches = new Map();
     this.held = new Set();
-    this.fine = false; // Maj enfoncée : zoom plus fin
+    this.fine = false; // Maj enfoncée : zoom et déplacement plus fins
     this.bookSheets = [];
     this.sheetCache = new Map();
     const lengths = opts.lengths && opts.lengths.length === epub.spine.length ? opts.lengths : null;
@@ -877,17 +877,21 @@ ${B} a, ${B} a * { color: ${t.link} !important; }` : ""}
     return { x: round((px - f.offsetWidth / 2) / u), y: round((py - f.offsetHeight / 2) / u), zoom: round(z.ts * u) };
   }
 
-  setView(v) {
+  setView(v, instant) {
     const z = this.zoom, f = this.frame, u = this.viewUnit();
     z.ts = Math.min(5, Math.max(1, v.zoom / u));
     z.tx = this.stage.clientWidth / 2 - f.offsetLeft - (f.offsetWidth / 2 + v.x * u) * z.ts;
     z.ty = this.stage.clientHeight / 2 - f.offsetTop - (f.offsetHeight / 2 + v.y * u) * z.ts;
     this.clampZoom();
     if (z.ts < 1.001 && Math.abs(z.tx) < 1 && Math.abs(z.ty) < 1) { z.ts = 1; z.tx = 0; z.ty = 0; }
-    this.animateZoom();
+    if (!instant) return this.animateZoom();
+    cancelAnimationFrame(this.zoomRaf);
+    this.zoomRaf = 0;
+    z.s = z.ts; z.x = z.tx; z.y = z.ty;
+    this.applyZoom();
   }
 
-  /* Clavier : WASD déplace la page, E / ↑ et Q / ↓ zooment (finement avec Maj), tant que la touche est enfoncée. */
+  /* Clavier : WASD déplace la page, E / ↑ et Q / ↓ zooment, tant que la touche est enfoncée (avec Maj : quatre fois plus lentement). */
   hold(code, down) {
     if (down) this.held.add(code);
     else this.held.delete(code);
@@ -896,7 +900,7 @@ ${B} a, ${B} a * { color: ${t.link} !important; }` : ""}
       const tick = (now) => {
         const dt = Math.min(0.05, Math.max(0, now - last) / 1000);
         last = now;
-        const speed = 700 * dt;
+        const speed = (this.fine ? 175 : 700) * dt;
         let dx = 0, dy = 0;
         // La page suit la touche : W la fait monter, S descendre, A aller à gauche, D à droite.
         const up = this.settings.invertY ? speed : -speed; // option « Inverser W et S »

@@ -208,7 +208,8 @@
           <button data-view="3">3</button>
           <button data-view="4">4</button>
         </div>
-        <p class="typo-hint"><kbd>Maj</kbd> + <kbd>1</kbd> à <kbd>4</kbd> mémorise le zoom et la position (pour tout le livre) ; <kbd>1</kbd> à <kbd>4</kbd> y revient.</p>
+        <p class="typo-hint"><kbd>Maj</kbd> + <kbd>1</kbd> à <kbd>4</kbd> mémorise le zoom et la position (pour tout le livre) ; <kbd>1</kbd> à <kbd>4</kbd> y revient.
+          <kbd>C</kbd> / <kbd>X</kbd> : page suivante à la vue 1, page précédente à la vue 4.</p>
       </div>
       <div class="typo-row text-only">
         <span class="typo-label">Largeur</span>
@@ -280,11 +281,16 @@
         <span>Inverser <kbd>A</kbd> et <kbd>D</kbd> <em>(A envoie la page à droite, D à gauche)</em></span>
         <input type="checkbox" id="invert-x" class="switch">
       </label>
+      <label class="field switch-field">
+        <span><kbd>C</kbd> page suivante à la vue&nbsp;1, <kbd>X</kbd> page précédente à la vue&nbsp;4</span>
+        <input type="checkbox" id="auto-views" class="switch">
+      </label>
       <details class="field">
         <summary>Raccourcis clavier</summary>
         <dl class="keys">
           <dt><kbd>→</kbd> <kbd>Espace</kbd></dt><dd>Page suivante</dd>
           <dt><kbd>←</kbd> <kbd>Maj</kbd>+<kbd>Espace</kbd></dt><dd>Page précédente</dd>
+          <dt><kbd>C</kbd> <kbd>X</kbd></dt><dd>Page suivante / précédente, en allant à la vue 1 / à la vue 4 (option dans les paramètres, activée par défaut)</dd>
           <dt><kbd>T</kbd></dt><dd>Sommaire</dd>
           <dt><kbd>B</kbd></dt><dd>Ajouter / retirer un signet</dd>
           <dt><kbd>R</kbd> <kbd>/</kbd></dt><dd>Rechercher dans le livre</dd>
@@ -292,12 +298,12 @@
           <dt><kbd>+</kbd> <kbd>−</kbd></dt><dd>Taille du texte</dd>
           <dt><kbd>9</kbd> <kbd>0</kbd></dt><dd>Une page / deux pages à la fois</dd>
           <dt>Molette <kbd>E</kbd> <kbd>Q</kbd> <kbd>↑</kbd> <kbd>↓</kbd></dt><dd>Zoomer / dézoomer vers le curseur (<kbd>E</kbd> ou <kbd>↑</kbd> zoome, <kbd>Q</kbd> ou <kbd>↓</kbd> dézoome) ; avec <kbd>Maj</kbd>, plus finement</dd>
-          <dt><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></dt><dd>Déplacer la page : <kbd>W</kbd> vers le haut, <kbd>S</kbd> vers le bas, <kbd>A</kbd> à gauche, <kbd>D</kbd> à droite (ou glisser une image, les marges, ou n'importe où avec <kbd>Ctrl</kbd>)</dd>
+          <dt><kbd>W</kbd> <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd></dt><dd>Déplacer la page : <kbd>W</kbd> vers le haut, <kbd>S</kbd> vers le bas, <kbd>A</kbd> à gauche, <kbd>D</kbd> à droite ; avec <kbd>Maj</kbd>, plus lentement (ou glisser une image, les marges, ou n'importe où avec <kbd>Ctrl</kbd>)</dd>
           <dt><kbd>1</kbd> à <kbd>4</kbd></dt><dd>Aller à une vue mémorisée (zoom + position) ; <kbd>Maj</kbd> + <kbd>1</kbd> à <kbd>4</kbd> pour mémoriser la vue actuelle. Chaque livre a ses vues, valables sur toutes ses pages.</dd>
           <dt><kbd>Échap</kbd></dt><dd>Taille et position normales, fermer un menu, quitter le plein écran, puis revenir à la bibliothèque</dd>
         </dl>
       </details>
-      <p class="version muted small">Smacpub — version 12</p>
+      <p class="version muted small">Smacpub — version 13</p>
     </form>
   </dialog>
 

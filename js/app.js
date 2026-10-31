@@ -36,7 +36,7 @@ function toast(message, type = "", ms = 3500) {
 
 const Settings = {
   KEY: "smacpub:settings",
-  DEFAULTS: { theme: "auto", accent: "orange", font: "literata", fontSize: 19, lineHeight: 1.6, width: "medium", spread: "auto", justify: true, invertY: false, invertX: false, name: "" },
+  DEFAULTS: { theme: "auto", accent: "orange", font: "literata", fontSize: 19, lineHeight: 1.6, width: "medium", spread: "auto", justify: true, invertY: false, invertX: false, autoViews: true, name: "" },
   data: null,
   load() {
     let saved = {};
@@ -55,6 +55,7 @@ const Settings = {
     if (typeof s.justify === "boolean") out.justify = s.justify;
     if (typeof s.invertY === "boolean") out.invertY = s.invertY;
     if (typeof s.invertX === "boolean") out.invertX = s.invertX;
+    if (typeof s.autoViews === "boolean") out.autoViews = s.autoViews;
     if (typeof s.name === "string") out.name = s.name.slice(0, 40);
     return out;
   },
@@ -125,6 +126,7 @@ function syncControls() {
   $("#justify").checked = s.justify;
   $("#invert-y").checked = s.invertY;
   $("#invert-x").checked = s.invertX;
+  $("#auto-views").checked = s.autoViews;
 }
 
 /* ================= Import ================= */
@@ -596,8 +598,18 @@ const Read = {
   },
 
   /* --- Navigation --- */
-  next() { this.turned(); this.reader.next(); },
-  prev() { this.turned(); this.reader.prev(); },
+  next() { this.turned(); return this.reader.next(); },
+  prev() { this.turned(); return this.reader.prev(); },
+
+  /** X / C : page précédente ou suivante, puis (option, activée par défaut) la vue 4 ou la vue 1. */
+  async turnTo(forward) {
+    const r = this.reader, where = () => [r.index, r.part, r.page].join();
+    const before = where();
+    await (forward ? this.next() : this.prev());
+    if (!Settings.data.autoViews || this.reader !== r || where() === before) return;
+    const v = (this.state.views || [])[forward ? 0 : 3];
+    if (v && [v.x, v.y, v.zoom].every(Number.isFinite)) r.setView(v, true);
+  },
   turned() {
     this.reader.clearHighlight();
     if (this.returnTo && ++this.returnTurns > 10) this.hideReturn();
@@ -825,6 +837,7 @@ function onKey(e) {
   const digit = /^(?:Digit|Numpad)(\d)$/.exec(e.code), n = digit ? +digit[1] : -1;
   if (n >= 1 && n <= 4) { e.preventDefault(); e.shiftKey ? Read.saveView(n) : Read.goView(n); return; }
   if (n === 9 || n === 0) { e.preventDefault(); setSpread(n === 0); return; }
+  if (e.code === "KeyX" || e.code === "KeyC") { e.preventDefault(); Read.turnTo(e.code === "KeyC"); return; }
   switch (e.key) {
     case "ArrowRight": case "PageDown": Read.next(); break;
     case "ArrowLeft": case "PageUp": Read.prev(); break;
@@ -1010,6 +1023,7 @@ function bind() {
   $("#justify").addEventListener("change", (e) => Settings.set("justify", e.target.checked));
   $("#invert-y").addEventListener("change", (e) => Settings.set("invertY", e.target.checked));
   $("#invert-x").addEventListener("change", (e) => Settings.set("invertX", e.target.checked));
+  $("#auto-views").addEventListener("change", (e) => Settings.set("autoViews", e.target.checked));
   $("#r-prev").addEventListener("click", (e) => { e.stopPropagation(); Read.prev(); });
   $("#r-next").addEventListener("click", (e) => { e.stopPropagation(); Read.next(); });
   $("#r-scrim").addEventListener("click", () => Read.closeOverlays());

@@ -23,10 +23,12 @@ Pas de compte, pas de serveur : vos livres et vos positions de lecture restent s
 - Barre de progression cliquable pour sauter n'importe où dans le livre.
 - Une ou deux pages à la fois (automatique quand la fenêtre est assez large).
 - Zoom (molette, pincement, `E`/`Q` ou flèches ↑/↓), doux et centré sur le curseur, plus fin en tenant `Maj` ; la barre et les boutons ne sont pas agrandis.
-  On déplace la page en la faisant glisser ou avec W A S D, même au-delà des bords ; le zoom est conservé d'une page à l'autre ; `Échap` pour revenir.
+  On déplace la page en la faisant glisser ou avec W A S D (plus lentement en tenant `Maj`), même au-delà des bords ; le zoom est conservé d'une page à l'autre ; `Échap` pour revenir.
 - **Vues mémorisées** : jusqu'à 4 par livre, chacune garde le zoom et la position (`Maj` + `1` à `4` pour mémoriser, `1` à `4` pour y aller).
   Elles servent sur toutes les pages du livre : en BD, par exemple, une vue en haut à gauche et une autre en bas à droite, à rappeler à chaque page.
   Aussi dans le menu Aa (cases 1 à 4).
+  `C` tourne la page et va à la vue 1, `X` revient à la page précédente et va à la vue 4 (option dans ⚙, activée par défaut) :
+  on lit une planche de la vue 1 à la vue 4, puis `C` pour la suivante.
 - Plein écran avec `F` (ou le bouton ⛶) : la barre et le pied de page disparaissent, la page prend toute la place. Hors plein écran, toute l'interface reste visible.
 - Thèmes clair, sépia et sombre, et une couleur d'accent au choix (orange, violet, bleu, vert, rose, ardoise) ; police « livre » (Literata, incluse), sans-serif ou celle de l'éditeur ; taille, interligne, largeur de colonne, texte justifié.
 
@@ -81,6 +83,7 @@ Il suffit de l'ouvrir avec Chrome.
 | --- | --- |
 | `→` ou `Espace` | Page suivante |
 | `←` ou `Maj+Espace` | Page précédente |
+| `C` / `X` | Page suivante / précédente, en allant à la vue 1 / à la vue 4 (option dans ⚙, activée par défaut) |
 | `T` | Sommaire |
 | `B` | Ajouter / retirer un signet |
 | `R` ou `/` | Rechercher dans le livre |
@@ -89,7 +92,7 @@ Il suffit de l'ouvrir avec Chrome.
 | `9` / `0` | Une page / deux pages à la fois |
 | `1` à `4` | Aller à une vue mémorisée (zoom + position) ; `Maj` + `1` à `4` pour mémoriser la vue actuelle |
 | Molette, `E` / `Q`, `↑` / `↓` | Zoomer / dézoomer vers le curseur (`E` ou `↑` zoome, `Q` ou `↓` dézoome) ; avec `Maj`, plus finement |
-| `W` `A` `S` `D` | Déplacer la page : `W` vers le haut, `S` vers le bas, `A` à gauche, `D` à droite (ou glisser une image, les marges, ou n'importe où avec `Ctrl` ; options dans ⚙ pour inverser W et S, ou A et D) |
+| `W` `A` `S` `D` | Déplacer la page : `W` vers le haut, `S` vers le bas, `A` à gauche, `D` à droite ; avec `Maj`, plus lentement (ou glisser une image, les marges, ou n'importe où avec `Ctrl` ; options dans ⚙ pour inverser W et S, ou A et D) |
 | `Échap` | Taille et position normales, fermer un menu, puis revenir à la bibliothèque |
 
 ## Vos données
