@@ -248,7 +248,11 @@ const Library = {
   async refresh() {
     const [books, states] = await Promise.all([DB.all("books"), DB.all("state")]);
     const byId = new Map(states.map((s) => [s.id, s]));
-    this.books = books.map((b) => ({ ...b, state: byId.get(b.id) || { id: b.id } }));
+    this.books = books.map((b) => {
+      const state = byId.get(b.id) || { id: b.id };
+      // Titre choisi dans l'appli (gardé avec l'état du livre, donc aussi dans la sauvegarde) ; le fichier n'est pas touché.
+      return { ...b, title: state.customTitle || b.title, originalTitle: b.title, state };
+    });
     this.render();
   },
 
@@ -279,7 +283,7 @@ const Library = {
       if (this.filter === "unread" && s.lastReadAt) return false;
       if (this.filter === "finished" && !s.finished) return false;
       if (this.filter === "favorite" && !s.favorite) return false;
-      return !q || EpubUtil.fold(b.title + " " + b.author).text.includes(q);
+      return !q || EpubUtil.fold(b.title + " " + b.originalTitle + " " + b.author).text.includes(q);
     });
     const coll = new Intl.Collator("fr", { sensitivity: "base", numeric: true });
     const cmp = {
@@ -366,6 +370,8 @@ const Library = {
       <button data-act="favorite"><svg class="icon"><use href="#i-star"/></svg>${s.favorite ? "Retirer des favoris" : "Ajouter aux favoris"}</button>
       <button data-act="finished"><svg class="icon"><use href="#i-check"/></svg>${s.finished ? "Marquer comme non terminé" : "Marquer comme terminé"}</button>
       ${s.lastReadAt ? `<button data-act="restart"><svg class="icon"><use href="#i-restart"/></svg>Recommencer au début</button>` : ""}
+      <button data-act="rename"><svg class="icon"><use href="#i-pencil"/></svg>Renommer…</button>
+      ${s.customTitle ? `<button data-act="rename-reset"><svg class="icon"><use href="#i-undo"/></svg>Titre d’origine</button>` : ""}
       <button data-act="cover"><svg class="icon"><use href="#i-image"/></svg>Changer la couverture…</button>
       ${b.customCover ? `<button data-act="cover-reset"><svg class="icon"><use href="#i-undo"/></svg>Couverture d’origine</button>` : ""}
       <hr>
@@ -387,7 +393,8 @@ const Library = {
   },
 
   async setCover(b, cover, custom) {
-    const { state, ...book } = b;
+    const book = await DB.get("books", b.id);
+    if (!book) return;
     await DB.put("books", { ...book, cover, customCover: custom });
     if (this.covers.has(b.id)) { URL.revokeObjectURL(this.covers.get(b.id)); this.covers.delete(b.id); }
     toast(custom ? "Couverture mise à jour." : "Couverture d’origine rétablie.");
@@ -421,6 +428,17 @@ const Library = {
       } catch (err) { console.error(err); }
       return this.setCover(b, cover, false);
     }
+    if (action === "rename") {
+      const title = await renameDialog(b.title, b.originalTitle);
+      if (title === null || title === b.title) return;
+      if (!title || title === b.originalTitle) delete s.customTitle;
+      else s.customTitle = title;
+      toast(s.customTitle ? `Renommé en « ${s.customTitle} ».` : "Titre d’origine rétabli.");
+    }
+    if (action === "rename-reset") {
+      delete s.customTitle;
+      toast("Titre d’origine rétabli.");
+    }
     if (action === "restart") {
       Object.assign(s, { location: null, progress: 0, finished: false, chapter: "" });
       toast(`« ${b.title} » reprendra au début.`);
@@ -439,6 +457,19 @@ const Library = {
     await this.refresh();
   },
 };
+
+/** Nouveau titre (espaces nettoyés ; vide = titre d'origine), ou null si on annule. */
+function renameDialog(current, original) {
+  const d = $("#rename-dialog"), input = $("#rename-input");
+  input.value = current;
+  $("#rename-original").textContent = current !== original ? `Titre d’origine : « ${original} »` : "";
+  d.returnValue = "";
+  d.showModal();
+  input.select();
+  return new Promise((resolve) => d.addEventListener("close", () => {
+    resolve(d.returnValue === "ok" ? input.value.replace(/\s+/g, " ").trim().slice(0, 200) : null);
+  }, { once: true }));
+}
 
 function confirmDialog(title, text, okLabel) {
   const d = $("#confirm-dialog");
@@ -473,8 +504,9 @@ const Read = {
     this.libraryScroll = scrollY;
     $("#library").hidden = true;
     this.el.hidden = false;
-    document.title = book.title + " — Smacpub";
-    $("#r-book-title").textContent = book.title;
+    const title = this.state.customTitle || book.title;
+    document.title = title + " — Smacpub";
+    $("#r-book-title").textContent = title;
     $("#r-chapter").textContent = book.author || "";
     $("#r-foot-left").textContent = "";
     $("#r-foot-right").textContent = "";
@@ -906,6 +938,7 @@ async function importBackup(file) {
       for (const k of ["location", "progress", "lastReadAt", "finished", "chapter", "favorite"]) if (k in inc) merged[k] = inc[k];
     } else if (merged.favorite === undefined && inc.favorite) merged.favorite = true;
     if (Array.isArray(inc.views) && (!Array.isArray(cur.views) || (inc.lastReadAt || 0) > (cur.lastReadAt || 0))) merged.views = inc.views;
+    if (typeof inc.customTitle === "string" && (!cur.customTitle || (inc.lastReadAt || 0) > (cur.lastReadAt || 0))) merged.customTitle = inc.customTitle.slice(0, 200);
     const known = new Set((cur.bookmarks || []).map((b) => b.id));
     merged.bookmarks = [...(cur.bookmarks || []), ...(Array.isArray(inc.bookmarks) ? inc.bookmarks : []).filter((b) => b && !known.has(b.id))];
     await DB.put("state", merged);
@@ -986,6 +1019,10 @@ function bind() {
   }
   $("#export-btn").addEventListener("click", exportData);
   $("#import-btn").addEventListener("click", () => $("#backup-input").click());
+  // Entrée valide le nouveau titre (sinon le formulaire prendrait le premier bouton, « Annuler »).
+  $("#rename-input").addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); $("#rename-dialog").close("ok"); }
+  });
   $("#cover-input").addEventListener("change", async (e) => {
     const f = e.target.files[0], b = Library.book(e.target.dataset.id);
     e.target.value = "";

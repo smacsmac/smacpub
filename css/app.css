@@ -473,6 +473,9 @@
   .row.end { justify-content: flex-end; margin-top: 18px; }
   .small-dialog { width: min(420px, calc(100vw - 32px)); }
   .small-dialog h2 { font-size: 20px; margin-bottom: 8px; }
+  .rename-field { border-top: 0; display: grid; gap: 8px; }
+  .rename-field > span { margin: 0; font-weight: 400; font-size: 13px; }
+  .rename-field #rename-original:empty { display: none; }
   .keys { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; margin: 14px 0 0; font-size: 14px; }
   .keys dt { white-space: nowrap; }
   .keys dd { margin: 0; color: var(--muted); }

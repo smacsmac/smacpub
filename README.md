@@ -10,7 +10,7 @@ Pas de compte, pas de serveur : vos livres et vos positions de lecture restent s
 - Grille de couvertures avec progression. Une couverture est générée si le livre n'en a pas.
 - Carte « Continuer la lecture » en haut : le dernier livre ouvert, le chapitre, le pourcentage.
 - Filtres (en cours, à lire, terminés, favoris), tri (récents, titre, auteur, ajout, progression), recherche par titre ou auteur.
-- Menu par livre : favori, marquer comme terminé, recommencer au début, changer la couverture (avec retour à l'originale), retirer de la bibliothèque (le fichier d'origine n'est jamais touché).
+- Menu par livre : favori, marquer comme terminé, recommencer au début, renommer (le titre choisi s'affiche partout dans l'appli, le fichier garde son nom ; retour au titre d'origine possible), changer la couverture (avec retour à l'originale), retirer de la bibliothèque (le fichier d'origine n'est jamais touché).
 
 **Lecture**
 - Pages à tourner (flèches, espace, glissement du doigt, clic dans les marges).
