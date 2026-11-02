@@ -216,8 +216,14 @@ async function importFiles(fileList) {
         size: file.size,
         addedAt: Date.now(),
         cover,
+        coverAt: Date.now(),
         lengths,
       }, stored);
+      // Ce livre a peut-être été retiré avant : on rajoute, donc la pierre
+      // tombale n'a plus lieu d'être. Sans ça, la synchro suivante le
+      // retirerait à nouveau, et on ne comprendrait pas pourquoi.
+      const ancien = await DB.get("state", id);
+      if (ancien && ancien.retire) { delete ancien.retire; await DB.put("state", ancien); }
       epub.destroy();
       added++;
     } catch (err) {
@@ -232,6 +238,7 @@ async function importFiles(fileList) {
   if (added) {
     if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
     await Library.refresh();
+    Sync.bientot();
   }
   return ids;
 }
@@ -340,7 +347,10 @@ const Library = {
     $("#grid").innerHTML = list.map((b) => {
       const s = b.state, p = this.progress(b);
       let meta;
-      const tag = b.format === "comic" ? `<span class="tag">BD</span>` : "";
+      const tag = (b.format === "comic" ? `<span class="tag">BD</span>` : "")
+        + (Sync.manquants.has(b.id)
+          ? `<span class="tag pc" title="Ce livre est sur le PC. Il descendra tout seul à l’ouverture.">↓ PC</span>` : "")
+        + (b.state.phon ? `<span class="tag phon" title="Envoyé à Phonétique">Ph</span>` : "");
       if (s.finished) meta = `<span class="done">✓ Terminé</span>`;
       else if (s.lastReadAt) meta = `<span>${pct(p)}</span><span>·</span><span>${ago(s.lastReadAt)}</span>`;
       else meta = Date.now() - b.addedAt < 7 * 86400000 ? `<span class="new">Nouveau</span>` : `<span>Pas commencé</span>`;
@@ -375,6 +385,9 @@ const Library = {
       <button data-act="cover"><svg class="icon"><use href="#i-image"/></svg>Changer la couverture…</button>
       ${b.customCover ? `<button data-act="cover-reset"><svg class="icon"><use href="#i-undo"/></svg>Couverture d’origine</button>` : ""}
       <hr>
+      <button data-act="phon"><svg class="icon"><use href="#i-upload"/></svg>${s.phon ? "Renvoyer à Phonétique" : "Envoyer à Phonétique"}</button>
+      ${s.phon ? `<button data-act="phon-off"><svg class="icon"><use href="#i-undo"/></svg>Retirer de Phonétique</button>` : ""}
+      <hr>
       <button data-act="remove" class="danger"><svg class="icon"><use href="#i-trash"/></svg>Retirer de la bibliothèque</button>`;
     menu.dataset.id = id;
     menu.hidden = false;
@@ -395,10 +408,14 @@ const Library = {
   async setCover(b, cover, custom) {
     const book = await DB.get("books", b.id);
     if (!book) return;
-    await DB.put("books", { ...book, cover, customCover: custom });
+    // La date du choix fait le nom du fichier sur le PC : changer la
+    // couverture change donc le nom, et c'est ainsi que l'autre machine — et
+    // Phonétique — savent qu'il faut la retélécharger.
+    await DB.put("books", { ...book, cover, customCover: custom, coverAt: Date.now() });
     if (this.covers.has(b.id)) { URL.revokeObjectURL(this.covers.get(b.id)); this.covers.delete(b.id); }
     toast(custom ? "Couverture mise à jour." : "Couverture d’origine rétablie.");
     await this.refresh();
+    Sync.bientot();
   },
 
   async act(action, id) {
@@ -422,7 +439,9 @@ const Library = {
     if (action === "cover-reset") {
       let cover = null;
       try {
-        const epub = await Epub.open(await DB.get("files", id));
+        const fichier = (await DB.get("files", id)) || await Sync.prendreLivre(id, true);
+        if (!fichier) return toast("Ce livre n’est pas sur cet appareil.", "error");
+        const epub = await Epub.open(fichier);
         cover = await makeThumb(await epub.coverBlob());
         epub.destroy();
       } catch (err) { console.error(err); }
@@ -433,11 +452,29 @@ const Library = {
       if (title === null || title === b.title) return;
       if (!title || title === b.originalTitle) delete s.customTitle;
       else s.customTitle = title;
+      s.titleAt = Date.now();
       toast(s.customTitle ? `Renommé en « ${s.customTitle} ».` : "Titre d’origine rétabli.");
     }
     if (action === "rename-reset") {
       delete s.customTitle;
+      s.titleAt = Date.now();
       toast("Titre d’origine rétabli.");
+    }
+    /* La passerelle, livre par livre. Phonétique REMPLACE sa boîte à chaque
+       dépôt : marquer ce livre, c'est donc redéposer tout ce qui est marqué —
+       c'est le serveur qui s'en charge. Et chaque appui pose un `at` neuf,
+       sans quoi Phonétique ignorerait une correction de titre. */
+    if (action === "phon" || action === "phon-off") {
+      if (action === "phon") { s.phon = 1; delete s.phonEfface; }
+      else { delete s.phon; s.phonEfface = 1; }   // une pierre tombale, pas une disparition
+      s.phonAt = Date.now();
+      await DB.put("state", s);
+      await this.refresh();
+      const r = await Sync.versPhonetique(false);
+      if (!r.ok) toast("Phonétique : " + (r.raison || "échec"), "error", 7000);
+      else if (action === "phon") toast(`« ${b.title} » est chez Phonétique.`);
+      else toast(`« ${b.title} » a été retiré de Phonétique.`);
+      return;
     }
     if (action === "restart") {
       Object.assign(s, { location: null, progress: 0, finished: false, chapter: "" });
@@ -449,12 +486,22 @@ const Library = {
         "Retirer");
       if (!ok) return;
       await DB.removeBook(id);
+      /* UNE PIERRE TOMBALE, PAS UNE DISPARITION. Sans elle, ce livre
+         reviendrait du PC à la synchro suivante — et si on le retirait là-bas,
+         il reviendrait d'ici. La pierre porte la date : elle tranche. */
+      await DB.put("state", { id, retire: Date.now(), ...(s.phon || s.phonEfface
+        ? { phonEfface: 1, phonAt: Date.now() } : {}) });
       if (this.covers.has(id)) { URL.revokeObjectURL(this.covers.get(id)); this.covers.delete(id); }
       toast(`« ${b.title} » a été retiré.`);
-      return this.refresh();
+      await this.refresh();
+      // Retiré de la bibliothèque, donc retiré de chez Phonétique aussi.
+      if (s.phon || s.phonEfface) Sync.versPhonetique(false);
+      else Sync.bientot();
+      return;
     }
     await DB.put("state", s);
     await this.refresh();
+    Sync.bientot();
   },
 };
 
@@ -498,7 +545,20 @@ const Read = {
     const opening = (this.opening = Symbol());
     const [book, file, saved] = await Promise.all([DB.get("books", id), DB.get("files", id), DB.get("state", id)]);
     if (opening !== this.opening) return;
-    if (!book || !file) { toast("Ce livre n’est plus dans la bibliothèque.", "error"); return go("#/", true); }
+    if (!book) { toast("Ce livre n’est plus dans la bibliothèque.", "error"); return go("#/", true); }
+    /* LA FICHE EST LÀ, LE FICHIER PAS ENCORE. C'est l'état normal d'un livre
+       ajouté sur l'autre machine : la couverture et le titre sont venus avec
+       le catalogue, qui pèse quelques kilo-octets, et le fichier — mille fois
+       plus lourd — attend qu'on veuille vraiment le lire. Le voilà voulu. */
+    let contenu = file;
+    if (!contenu) {
+      contenu = await Sync.prendreLivre(id, true);
+      if (opening !== this.opening) return;
+      if (!contenu) {
+        toast("Ce livre n’est pas sur cet appareil, et le PC ne répond pas.", "error", 6000);
+        return go("#/", true);
+      }
+    }
     this.book = book;
     this.state = { id, bookmarks: [], ...saved };
     this.libraryScroll = scrollY;
@@ -515,7 +575,7 @@ const Read = {
     try {
       this.comic = book.format === "comic";
       this.el.classList.toggle("comic", this.comic);
-      this.epub = await (this.comic ? Comic : Epub).open(file);
+      this.epub = await (this.comic ? Comic : Epub).open(contenu);
     } catch (err) {
       console.error(err);
       toast("Impossible d’ouvrir ce livre : " + err.message, "error", 6000);
@@ -922,6 +982,43 @@ async function exportData() {
   toast("Sauvegarde exportée.");
 }
 
+/* LA FUSION D'UN LIVRE, et elle sert maintenant aux deux : importer une
+   sauvegarde, et parler au serveur du PC. La règle n'a pas changé — la
+   position la plus récemment lue gagne, les signets des deux côtés
+   s'additionnent, rien ne se perd — elle est seulement sortie de sa fonction.
+
+   Deux dates se sont ajoutées, et pour une raison concrète : avec deux
+   appareils, on renomme un livre sur l'un sans l'avoir lu, et il n'y avait
+   alors rien pour dire que ce titre-là était le plus récent. `titleAt` le
+   dit. Une sauvegarde qui ne les a pas retombe sur l'ancienne règle. */
+function mergeState(cur, inc) {
+  const merged = { ...cur };
+  const plusRecent = (inc.lastReadAt || 0) > (cur.lastReadAt || 0);
+  if (plusRecent) {
+    for (const k of ["location", "progress", "lastReadAt", "finished", "chapter", "favorite"]) if (k in inc) merged[k] = inc[k];
+  } else if (merged.favorite === undefined && inc.favorite) merged.favorite = true;
+  if (Array.isArray(inc.views) && (!Array.isArray(cur.views) || plusRecent)) merged.views = inc.views;
+  // Le titre choisi : la date du choix tranche si on l'a, sinon la lecture.
+  const titre = (inc.titleAt || 0) || (cur.titleAt || 0)
+    ? (inc.titleAt || 0) > (cur.titleAt || 0)
+    : (typeof inc.customTitle === "string" && (!cur.customTitle || plusRecent));
+  if (titre) {
+    if (typeof inc.customTitle === "string" && inc.customTitle) merged.customTitle = inc.customTitle.slice(0, 200);
+    else delete merged.customTitle;
+    if (inc.titleAt) merged.titleAt = inc.titleAt;
+  }
+  // Les marques de la passerelle : la dernière posée gagne.
+  if ((inc.phonAt || 0) > (cur.phonAt || 0)) {
+    merged.phonAt = inc.phonAt;
+    if (inc.phon) merged.phon = 1; else delete merged.phon;
+    if (inc.phonEfface) merged.phonEfface = 1; else delete merged.phonEfface;
+  }
+  if (inc.retire) merged.retire = Math.max(cur.retire || 0, inc.retire);
+  const known = new Set((cur.bookmarks || []).map((b) => b.id));
+  merged.bookmarks = [...(cur.bookmarks || []), ...(Array.isArray(inc.bookmarks) ? inc.bookmarks : []).filter((b) => b && !known.has(b.id))];
+  return merged;
+}
+
 async function importBackup(file) {
   let data;
   try { data = JSON.parse(await file.text()); } catch { data = null; }
@@ -933,15 +1030,7 @@ async function importBackup(file) {
   for (const inc of data.books) {
     if (!inc || typeof inc.id !== "string") continue;
     const cur = (await DB.get("state", inc.id)) || { id: inc.id };
-    const merged = { ...cur };
-    if ((inc.lastReadAt || 0) > (cur.lastReadAt || 0)) {
-      for (const k of ["location", "progress", "lastReadAt", "finished", "chapter", "favorite"]) if (k in inc) merged[k] = inc[k];
-    } else if (merged.favorite === undefined && inc.favorite) merged.favorite = true;
-    if (Array.isArray(inc.views) && (!Array.isArray(cur.views) || (inc.lastReadAt || 0) > (cur.lastReadAt || 0))) merged.views = inc.views;
-    if (typeof inc.customTitle === "string" && (!cur.customTitle || (inc.lastReadAt || 0) > (cur.lastReadAt || 0))) merged.customTitle = inc.customTitle.slice(0, 200);
-    const known = new Set((cur.bookmarks || []).map((b) => b.id));
-    merged.bookmarks = [...(cur.bookmarks || []), ...(Array.isArray(inc.bookmarks) ? inc.bookmarks : []).filter((b) => b && !known.has(b.id))];
-    await DB.put("state", merged);
+    await DB.put("state", mergeState(cur, inc));
     n++;
   }
   if (data.settings) {
@@ -1019,6 +1108,33 @@ function bind() {
   }
   $("#export-btn").addEventListener("click", exportData);
   $("#import-btn").addEventListener("click", () => $("#backup-input").click());
+
+  // ── le serveur du PC ──
+  const srvAdr = $("#srv-adresse");
+  srvAdr.placeholder = Sync.adresse() || "https://192.168.50.184:8795";
+  srvAdr.value = Sync.explicite();
+  srvAdr.addEventListener("change", () => {
+    const v = srvAdr.value.trim().replace(/\/+$/, "");
+    try { v ? localStorage.setItem(Sync.KEY, v) : localStorage.removeItem(Sync.KEY); } catch { /* ignore */ }
+    srvAdr.placeholder = Sync.adresse() || "https://192.168.50.184:8795";
+    Sync.dit(v ? "Adresse enregistrée." : (Sync.adresse() ? "Adresse de cette page : " + Sync.adresse() : "Serveur désactivé."));
+  });
+  $("#srv-btn").addEventListener("click", () => Sync.sync(true));
+  const phonAdr = $("#phon-adresse");
+  phonAdr.addEventListener("change", async () => {
+    const v = phonAdr.value.trim().replace(/\/+$/, "");
+    const ok = await Sync.reglagePhonetique(v);
+    Sync.dit(ok ? (v ? "Phonétique : " + v : "Phonétique : plus d’adresse.")
+                : "Le PC ne répond pas : l’adresse de Phonétique n’a pas pu être enregistrée.", !ok);
+  });
+  $("#phon-btn").addEventListener("click", async () => {
+    Sync.dit("J’envoie à Phonétique…");
+    const r = await Sync.versPhonetique(true);
+    if (r.ok) Sync.dit(`Phonétique : ${plural(r.envoyees, "livre déposé", "livres déposés")}`
+      + (r.tombes ? `, ${plural(r.tombes, "retiré", "retirés")}` : "")
+      + (r.manquantes ? ` — ${plural(r.manquantes, "couverture non déposée", "couvertures non déposées")}` : ""));
+    else Sync.dit("Phonétique : " + (r.raison || "échec"), true);
+  });
   // Entrée valide le nouveau titre (sinon le formulaire prendrait le premier bouton, « Annuler »).
   $("#rename-input").addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); $("#rename-dialog").close("ok"); }
@@ -1215,6 +1331,27 @@ async function start() {
 
   if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
     navigator.serviceWorker.register("sw.js").catch((err) => console.warn("Service worker :", err));
+  }
+
+  /* LE SERVEUR DU PC, s'il y en a un. On ne demande rien, on ne prévient de
+     rien : servie depuis le PC, l'appli parle à l'endroit d'où elle vient, et
+     ailleurs elle se tait. Le bloc de réglage n'apparaît que si un serveur
+     répond — sinon ce serait un formulaire pour une machine absente. */
+  if (await Sync.vivant()) {
+    const r = await Sync.litReglages();
+    if (r && typeof r.phonetique === "string") $("#phon-adresse").value = r.phonetique;
+    await Sync.sync(false);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") Sync.sync(false);
+    });
+  } else if (Sync.explicite()) {
+    Sync.dit("Le PC ne répond pas à cette adresse.", true);
+  } else {
+    /* Pas de serveur ici, et c'est très bien : c'est l'appli d'origine, qui
+       garde tout dans le navigateur. On le dit, parce que le réglage reste
+       visible — la copie installée depuis GitHub Pages doit pouvoir donner
+       l'adresse du PC, et elle ne la devinerait pas toute seule. */
+    Sync.dit("Aucun serveur ici : tout reste dans ce navigateur.");
   }
 }
 

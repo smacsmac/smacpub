@@ -43,6 +43,9 @@ const DB = {
 
   get(store, key) { return this.tx(store, "readonly", (t) => this.req(t.objectStore(store).get(key))); },
   all(store) { return this.tx(store, "readonly", (t) => this.req(t.objectStore(store).getAll())); },
+  // Les clés seules : savoir QUELS livres sont sur cet appareil sans charger
+  // les fichiers eux-mêmes, qui pèsent des centaines de mégaoctets.
+  keys(store) { return this.tx(store, "readonly", (t) => this.req(t.objectStore(store).getAllKeys())); },
   put(store, value, key) {
     return this.tx(store, "readwrite", (t) => { key === undefined ? t.objectStore(store).put(value) : t.objectStore(store).put(value, key); });
   },

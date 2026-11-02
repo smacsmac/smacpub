@@ -202,6 +202,12 @@
   .card .meta .done { color: var(--accent); font-weight: 600; }
   .card .meta .new { color: var(--accent); font-weight: 600; }
   .card .meta .tag { padding: 0 6px; border-radius: 6px; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 650; }
+  /* Un livre dont seule la fiche est là : il est sur le PC, et il descendra
+     à l'ouverture. Discret exprès — c'est une information, pas un ennui. */
+  .card .meta .tag.pc { background: var(--surface-2); color: var(--muted); }
+  .card .meta .tag.phon { background: var(--surface-2); color: var(--muted); }
+  #srv-line.warn { color: #c0392b; }
+  #srv-field .row { flex-wrap: wrap; }
   /* Bande dessinée : pas de recherche ni de réglages de texte */
   .reader.comic #r-search-btn, .reader.comic .tab[data-tab="search"], .reader.comic .typo .text-only { display: none; }
   .card-more {

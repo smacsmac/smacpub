@@ -1,7 +1,8 @@
 # Smacpub
 
 Un petit lecteur EPUB et BD (CBR, CBZ), simple et élégant, qui fonctionne **entièrement hors-ligne**, pensé pour un Chromebook.
-Pas de compte, pas de serveur : vos livres et vos positions de lecture restent sur votre appareil.
+Pas de compte : vos livres et vos positions de lecture restent sur votre appareil.
+Et si vous le voulez, **un serveur sur votre PC** pour que deux machines voient la même bibliothèque — il est facultatif, et l'appli ne l'attend jamais.
 
 ## Ce que fait l'appli
 
@@ -95,13 +96,50 @@ Il suffit de l'ouvrir avec Chrome.
 | `W` `A` `S` `D` | Déplacer la page : `W` vers le haut, `S` vers le bas, `A` à gauche, `D` à droite ; avec `Maj`, plus lentement (ou glisser une image, les marges, ou n'importe où avec `Ctrl` ; options dans ⚙ pour inverser W et S, ou A et D) |
 | `Échap` | Taille et position normales, fermer un menu, puis revenir à la bibliothèque |
 
+## Le serveur du PC (facultatif)
+
+`node smacpub-sync.mjs` — ou un double-clic sur `demarrer-smacpub.cmd`. Rien à installer : Node seul, aucune dépendance.
+
+Il fait deux choses, et pas une de plus.
+
+1. **Il sert l'application** sur `http://localhost:8794` et, si le certificat de noter est à portée, sur `https://<adresse-du-pc>:8795` — la deuxième est celle qui permet au Chromebook de l'installer comme une vraie application.
+2. **Il garde la bibliothèque** : le catalogue dans `smacpub-donnees.json` (lisible à l'œil nu, avec les trente dernières versions dans `smacpub-copies/`), les fichiers dans `smacpub-livres/`, les couvertures dans `smacpub-couvertures/`.
+
+### Ce que ça change
+
+Le PC et le Chromebook voient **la même étagère**. Un livre ajouté sur l'un apparaît sur l'autre avec son titre et sa couverture, et **son fichier ne descend qu'à la première ouverture** — le catalogue pèse quelques kilo-octets, un CBZ parfois trois cents mégaoctets. Un livre qui n'est pas encore là porte la mention `↓ PC` sur l'étagère.
+
+Sont partagés : les livres, les couvertures, les positions de lecture, les signets, les favoris, les titres que vous avez choisis en renommant, et les livres retirés. Ne le sont pas : les réglages d'affichage — un Chromebook et un PC n'ont ni le même écran ni la même distance aux yeux.
+
+La fusion n'a rien de neuf : c'est celle d'« importer une sauvegarde ». Pour chaque livre, la position la plus récemment lue gagne, et les signets des deux côtés s'additionnent. Deux appareils qui se rencontrent finissent identiques, quel que soit l'ordre.
+
+### Un livre retiré ne revient pas
+
+Retirer un livre laisse une **pierre tombale** datée. Sans elle, le livre retiré sur le PC reviendrait du Chromebook à la synchro suivante, et inversement, sans fin. Et si vous rajoutez le même fichier plus tard, c'est l'ajout qui est le plus récent : le livre revient pour de bon.
+
+### Où mettre l'adresse
+
+Nulle part, dans le cas normal : servie depuis le PC, l'appli parle à l'adresse d'où elle vient. Le champ **⚙ Paramètres → Serveur du PC** ne sert qu'à la copie installée depuis GitHub Pages, qui vit à une autre adresse — elle garde ses données là-bas, ce qui est très bien, et il lui suffit de connaître le PC pour se synchroniser avec lui. Dans ce cas il faut installer une fois l'autorité de noter sur l'appareil, sans quoi le navigateur refusera d'appeler le `https` du PC.
+
+## Envoyer un livre à Phonétique
+
+Phonétique — l'autre application de la maison — tient une **chronologie** de tout ce qui a été lu. Smacpub peut y déposer ses titres et ses couvertures : dans le menu **⋯** d'un livre, **« Envoyer à Phonétique »**. Le titre envoyé est **celui que vous voyez** : celui que vous avez choisi en renommant, sinon celui du fichier.
+
+- Il n'y va que si vous le dites, livre par livre. Rien ne part tout seul.
+- **« Renvoyer à Phonétique »** repart avec un horodatage neuf : c'est ainsi qu'une correction de titre passe.
+- **« Retirer de Phonétique »** le fait disparaître de la chronologie, et la disparition voyage entre ses appareils.
+- Vos comptes de mots et vos dates de lecture, chez Phonétique, **ne sont jamais touchés** : la passerelle n'écrit que le titre et la couverture.
+- L'adresse du serveur de Phonétique se met dans **⚙ Paramètres → Serveur du PC**. C'est le PC qui appelle Phonétique, jamais le navigateur : une page servie en https ne peut pas appeler du http, et il n'y a aucune raison d'installer une deuxième autorité pour contourner ça.
+
+Côté Phonétique, il faut que son serveur ait les routes de la boîte aux lettres (`/recolte`) : remplacer son `index.html` ne suffit pas, il faut aussi son `phonetique-sync.mjs`, et le redémarrer. Le signe que c'est bon : la ligne `entrées …` à son démarrage.
+
 ## Vos données
 
-- Les livres, positions, signets et favoris sont stockés dans le navigateur (IndexedDB), uniquement sur cet appareil.
+- Les livres, positions, signets et favoris sont stockés dans le navigateur (IndexedDB), uniquement sur cet appareil — et sur le PC si son serveur tourne.
 - ⚙ **Paramètres → Exporter mes données** crée un petit fichier de sauvegarde (positions, signets, favoris, réglages).
   **Importer une sauvegarde** le recharge, par exemple sur un autre ordinateur : après avoir ré-ajouté les mêmes EPUB, tout est retrouvé.
 - Gardez vos fichiers EPUB d'origine : la sauvegarde ne les contient pas.
-- Effacer les données du site dans Chrome efface aussi la bibliothèque.
+- Effacer les données du site dans Chrome efface aussi la bibliothèque. Si le serveur du PC tourne, elle revient à la synchro suivante.
 
 ## Idées pour plus tard
 
@@ -119,12 +157,18 @@ js/comic.js            BD (CBZ, CBR) : planches, doubles pages, ComicInfo.xml, c
 js/unrar.js            décompression RAR (UnRAR compilé en WebAssembly), chargé seulement pour les .cbr
 js/reader.js           affichage paginé et positions de lecture
 js/db.js               stockage local (IndexedDB)
+js/sync.js             le serveur du PC et la passerelle vers Phonétique
 js/app.js              bibliothèque, lecteur, réglages, sauvegarde
 js/fonts.js            police Literata intégrée
 sw.js                  fonctionnement hors-ligne (service worker)
 manifest.webmanifest   installation comme application
 tools/build-single.py  assemble le tout en un seul fichier smacpub.html
+smacpub-sync.mjs       le serveur du PC (facultatif, Node seul)
+demarrer-smacpub.cmd   pour le lancer d'un double-clic sur Windows
+tests/test-serveur.mjs éprouve le serveur et la passerelle, deux vrais navigateurs
 ```
+
+`node tests/test-serveur.mjs` monte un vrai serveur, un faux Phonétique qui refuse ce que le vrai refuse, et deux navigateurs isolés : un livre ajouté d'un côté arrive de l'autre, une position ne se perd pas, un livre retiré ne revient pas, le titre choisi est celui qui part, et l'appli s'ouvre en moins d'une seconde même quand le PC accepte la connexion et se tait.
 
 Aucune étape de compilation : ce sont des fichiers HTML, CSS et JavaScript ordinaires.
 Seul `js/unrar.js` est généré (depuis [node-unrar-js](https://github.com/YuJianrong/node-unrar.js) 2.0.2, regroupé avec esbuild, WebAssembly inclus).
