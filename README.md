@@ -105,6 +105,16 @@ Il fait deux choses, et pas une de plus.
 1. **Il sert l'application** sur `http://localhost:8794` et, si le certificat de noter est à portée, sur `https://<adresse-du-pc>:8795` — la deuxième est celle qui permet au Chromebook de l'installer comme une vraie application.
 2. **Il garde la bibliothèque** : le catalogue dans `smacpub-donnees.json` (lisible à l'œil nu, avec les trente dernières versions dans `smacpub-copies/`), les fichiers dans `smacpub-livres/`, les couvertures dans `smacpub-couvertures/`.
 
+### Il n'y a rien à appuyer
+
+La synchronisation se fait toute seule, dans les deux sens.
+
+- **Ce que vous changez part tout seul**, deux secondes plus tard : une page tournée, un signet, un favori, un titre renommé, un livre ajouté ou retiré. Toute écriture passe par un seul point (`js/db.js`, `prevenir`), donc aucune ne peut être oubliée.
+- **Ce que l'autre appareil change arrive tout seul**, dans la seconde : le serveur garde les pages ouvertes au bout d'un fil (`/flux`) et leur dit « le catalogue a changé » à l'instant où il change. Pas d'interrogation toutes les cinq secondes, et pas de retard de cinq secondes non plus.
+- Si ce fil meurt sans le dire — un portable qui sort de veille, un PC qui redémarre — une veille discrète le renoue et rattrape ce qui manque.
+
+**Le bouton de la barre du haut**, à gauche de l'engrenage, dit où on en est : une coche quand les deux machines sont d'accord (avec l'heure de la dernière synchro), une roue qui tourne pendant l'échange, un nuage barré quand le PC ne répond pas. Le chiffre orange compte les livres dont cet appareil n'a que la fiche. On peut appuyer dessus pour forcer une synchro — mais normalement, on n'a pas à y penser.
+
 ### Ce que ça change
 
 Le PC et le Chromebook voient **la même étagère**. Un livre ajouté sur l'un apparaît sur l'autre avec son titre et sa couverture, et **son fichier ne descend qu'à la première ouverture** — le catalogue pèse quelques kilo-octets, un CBZ parfois trois cents mégaoctets. Un livre qui n'est pas encore là porte la mention `↓ PC` sur l'étagère.

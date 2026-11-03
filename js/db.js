@@ -46,20 +46,37 @@ const DB = {
   // Les clés seules : savoir QUELS livres sont sur cet appareil sans charger
   // les fichiers eux-mêmes, qui pèsent des centaines de mégaoctets.
   keys(store) { return this.tx(store, "readonly", (t) => this.req(t.objectStore(store).getAllKeys())); },
-  put(store, value, key) {
-    return this.tx(store, "readwrite", (t) => { key === undefined ? t.objectStore(store).put(value) : t.objectStore(store).put(value, key); });
+  /* TOUTE ÉCRITURE APPELLE LA SYNCHRO, ET C'EST ÉCRIT ICI, UNE FOIS.
+     Ça l'était ailleurs, dans chaque bouton — et le lecteur, qui enregistre
+     la page à chaque fois qu'on la tourne, n'était pas dans la liste. Il
+     fallait donc appuyer sur un bouton pour que sa lecture monte au PC, ce
+     qui est exactement ce qu'une synchronisation est censée éviter. Un seul
+     point de passage : une écriture ajoutée demain sera suivie sans que
+     personne y pense.
+
+     `muet` n'est utilisé que par la synchro elle-même, quand elle range ce
+     qu'elle vient de recevoir : se réveiller sur ses propres écritures
+     relancerait une synchro sans fin. */
+  prevenir(store, muet) {
+    if (muet || typeof Sync === "undefined") return;
+    if (store === "state" || store === "books" || (Array.isArray(store) && store.includes("books"))) Sync.bientot();
+  },
+
+  put(store, value, key, muet) {
+    return this.tx(store, "readwrite", (t) => { key === undefined ? t.objectStore(store).put(value) : t.objectStore(store).put(value, key); })
+      .then((r) => { this.prevenir(store, muet); return r; });
   },
 
   addBook(book, file) {
     return this.tx(["books", "files"], "readwrite", (t) => {
       t.objectStore("books").put(book);
       t.objectStore("files").put(file, book.id);
-    });
+    }).then((r) => { this.prevenir("books"); return r; });
   },
 
   removeBook(id) {
     return this.tx(["books", "files", "state"], "readwrite", (t) => {
       for (const s of ["books", "files", "state"]) t.objectStore(s).delete(id);
-    });
+    }).then((r) => { this.prevenir("books"); return r; });
   },
 };

@@ -207,6 +207,22 @@
   .card .meta .tag.pc { background: var(--surface-2); color: var(--muted); }
   .card .meta .tag.phon { background: var(--surface-2); color: var(--muted); }
   #srv-line.warn { color: #c0392b; }
+  /* Le bouton de synchro de la barre du haut. Il ne dit rien quand tout va
+     bien — une coche discrète — et il ne crie que s'il y a de quoi. */
+  #sync-btn { position: relative; }
+  #sync-btn[data-etat="ok"] { color: var(--muted); }
+  #sync-btn[data-etat="travail"] { color: var(--accent); }
+  #sync-btn[data-etat="travail"] .icon { animation: tourne 1.1s linear infinite; }
+  #sync-btn[data-etat="souci"] { color: #c0392b; }
+  #sync-btn[data-etat="absent"] { color: var(--faint); }
+  /* Le nombre de livres qui ne sont pas encore sur cet appareil. */
+  #sync-btn .sync-n {
+    position: absolute; top: 1px; right: 0;
+    min-width: 14px; height: 14px; padding: 0 3px;
+    border-radius: 7px; background: var(--accent); color: var(--accent-ink);
+    font-size: 10px; font-weight: 700; line-height: 14px; text-align: center;
+  }
+  @keyframes tourne { to { transform: rotate(-360deg); } }
   #srv-field .row { flex-wrap: wrap; }
   /* Bande dessinée : pas de recherche ni de réglages de texte */
   .reader.comic #r-search-btn, .reader.comic .tab[data-tab="search"], .reader.comic .typo .text-only { display: none; }

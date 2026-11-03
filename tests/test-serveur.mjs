@@ -287,6 +287,41 @@ try{
     'sans écraser la sienne', deux.find(l => l.id === id1).pos);
 
   // ── 6 ────────────────────────────────────────────────────────────────────
+  // LE CŒUR DE L'AFFAIRE : il ne faut appuyer sur rien. C'est ce qui manquait
+  // — le lecteur enregistrait la page tournée sans le dire à la synchro, et
+  // l'autre appareil n'avait aucun moyen de l'apprendre.
+  titre('ET PERSONNE N’A À APPUYER SUR QUOI QUE CE SOIT');
+  const envois = [];
+  pc.p.on('request', r => {
+    if(r.method() === 'PUT' && /\/donnees$/.test(r.url())) envois.push(Date.now());
+  });
+  const avant6 = await cb.p.evaluate(i => (Library.book(i).state.progress || 0), id2);
+  // Une vraie page tournée, dans le vrai lecteur.
+  await pc.p.evaluate(i => { location.hash = '#/livre/' + i; }, id2);
+  await pc.p.waitForFunction(() => Read.reader && document.getElementById('r-loading').hidden,
+    null, { timeout:30000 });
+  await pc.p.keyboard.press('ArrowRight');
+  const recu = await cb.p.waitForFunction(
+    a => { const b = Library.book(a.id); return !!b && (b.state.progress || 0) !== a.avant; },
+    { id:id2, avant:avant6 }, { timeout:20000 }).then(() => true).catch(() => false);
+  chk(recu, 'le Chromebook a reçu la page tournée, sans qu’on y touche');
+  chk(envois.length >= 1 && envois.length <= 2,
+    'et le PC n’a envoyé qu’une fois, pas dix', envois.length);
+  // Celui qui écrit est prévenu de sa propre écriture : s'il la relisait, il
+  // réécrirait, et ainsi de suite — une synchro qui s'entretient toute seule.
+  const compte6 = envois.length;
+  await dort(4000);
+  chk(envois.length === compte6,
+    'et quatre secondes plus tard, plus rien ne bouge : aucune boucle',
+    [compte6, envois.length]);
+  chk(await pc.p.evaluate(() =>
+    document.getElementById('sync-btn').dataset.etat === 'ok'
+    && document.querySelector('#sync-btn use').getAttribute('href') === '#i-check'),
+    'le bouton de la barre porte une coche');
+  await pc.p.evaluate(() => { location.hash = '#/'; });
+  await pc.p.waitForFunction(() => !Read.reader, null, { timeout:10000 });
+
+  // ── 7 ────────────────────────────────────────────────────────────────────
   titre('LE TITRE QU’ON CHOISIT EST CELUI QUI COMPTE');
   await cb.p.evaluate(async id => {
     const s = (await DB.get('state', id)) || { id };
@@ -446,6 +481,12 @@ try{
   chk(ms < 5000, `et vite : ${ms} ms, pas soixante secondes`, ms);
   chk(await p.evaluate(() => !!document.querySelector('#library')),
     'c’est bien l’application, pas une page d’erreur');
+  // Et le bouton ne doit pas mentir : un PC muet, c'est un nuage barré.
+  await p.evaluate(() => document.getElementById('sync-btn').click());
+  const souci = await p.waitForFunction(
+    () => document.getElementById('sync-btn').dataset.etat === 'souci',
+    null, { timeout:20000 }).then(() => true).catch(() => false);
+  chk(souci, 'et le bouton le dit : le PC ne répond pas');
   for(const r of enAttente){ try{ r.writeHead(504); r.end(); }catch{} }
   await ctx.close();
   relais.close();

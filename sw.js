@@ -1,7 +1,7 @@
 /* Service worker : met l'application en cache pour qu'elle fonctionne sans connexion.
    Stratégie : réponse immédiate depuis le cache, mise à jour discrète en arrière-plan.
    L'appli s'ouvre donc tout de suite, même quand le PC qui la sert ne répond pas. */
-const CACHE = "smacpub-v15";
+const CACHE = "smacpub-v16";
 const ASSETS = [
   "./",
   "index.html",
@@ -32,8 +32,11 @@ const ASSETS = [
    Les livres et les couvertures, parce qu'un seul CBZ pèse plus que toute
    l'application : les ranger ici, ce serait garder chaque livre DEUX fois sur
    l'appareil — une dans la bibliothèque, une dans le cache du navigateur.
-   noter a appris cette leçon avec son coffre, à ses dépens. */
-const JAMAIS = /\/(donnees|health|reglages|passerelle)$|\/(livres|couvertures)(\/|$)/;
+   noter a appris cette leçon avec son coffre, à ses dépens.
+
+   Et `/flux` par-dessus tout : c'est une réponse qui ne finit jamais. La
+   mettre en cache, ce serait attendre une fin qui ne vient pas. */
+const JAMAIS = /\/(donnees|health|reglages|passerelle|flux)$|\/(livres|couvertures)(\/|$)/;
 
 self.addEventListener("install", (event) => {
   /* Chacun pour soi, et surtout : on s'installe même s'il en manque un.

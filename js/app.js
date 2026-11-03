@@ -1120,6 +1120,7 @@ function bind() {
     Sync.dit(v ? "Adresse enregistrée." : (Sync.adresse() ? "Adresse de cette page : " + Sync.adresse() : "Serveur désactivé."));
   });
   $("#srv-btn").addEventListener("click", () => Sync.sync(true));
+  $("#sync-btn").addEventListener("click", () => Sync.sync(true));
   const phonAdr = $("#phon-adresse");
   phonAdr.addEventListener("change", async () => {
     const v = phonAdr.value.trim().replace(/\/+$/, "");
@@ -1341,17 +1342,24 @@ async function start() {
     const r = await Sync.litReglages();
     if (r && typeof r.phonetique === "string") $("#phon-adresse").value = r.phonetique;
     await Sync.sync(false);
-    document.addEventListener("visibilitychange", () => {
-      if (document.visibilityState === "visible") Sync.sync(false);
-    });
+    /* Et à partir d'ici, plus personne n'a à appuyer sur rien : le serveur
+       prévient les pages ouvertes dès que le catalogue change (`flux`), et la
+       veille rattrape le cas où ce fil meurt sans le dire. */
+    Sync.flux();
+    Sync.veille();
   } else if (Sync.explicite()) {
     Sync.dit("Le PC ne répond pas à cette adresse.", true);
+    Sync.montre("souci", "Le PC ne répond pas à cette adresse");
+    Sync.veille();
   } else {
     /* Pas de serveur ici, et c'est très bien : c'est l'appli d'origine, qui
        garde tout dans le navigateur. On le dit, parce que le réglage reste
        visible — la copie installée depuis GitHub Pages doit pouvoir donner
        l'adresse du PC, et elle ne la devinerait pas toute seule. */
     Sync.dit("Aucun serveur ici : tout reste dans ce navigateur.");
+    // Pas de serveur : le bouton de la barre n'aurait rien à dire, et un
+    // bouton qui ne sert à rien est un bouton de trop.
+    $("#sync-btn").hidden = true;
   }
 }
 

@@ -82,10 +82,38 @@ SERVIS.set('/', 'index.html');
 const OUVERT = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET, PUT, POST, DELETE, OPTIONS',
-  'access-control-allow-headers': 'Content-Type',
+  'access-control-allow-headers': 'Content-Type, X-Smacpub-Qui',
   'access-control-allow-private-network': 'true',
   'access-control-max-age': '600',
 };
+
+/* LE SERVEUR PRÉVIENT, AU LIEU D'ÊTRE INTERROGÉ.
+ *
+ * Deux appareils ouverts sur la même bibliothèque, et il fallait appuyer sur
+ * un bouton de chaque côté : celui qui écrit ne pouvait pas le dire, et celui
+ * qui lit ne pouvait pas le savoir. Interroger le serveur toutes les cinq
+ * secondes réglerait la question en gaspillant tout, et serait quand même en
+ * retard de cinq secondes.
+ *
+ * Alors le serveur garde les pages ouvertes au bout du fil — un `text/
+ * event-stream`, le mécanisme que les navigateurs ont pour ça — et leur dit
+ * « le catalogue a changé » à l'instant où il change. C'est une ligne de
+ * texte, pas les données : chaque page va les chercher elle-même, en passant
+ * par la fusion habituelle.
+ *
+ * `auteur` est là pour une raison précise : celui qui vient d'écrire n'a rien
+ * à relire. Sans ce nom, chaque page qui enregistre se réveillerait
+ * elle-même, relirait tout et réécrirait l'identique — un aller-retour entier
+ * pour rien, à chaque page tournée.
+ */
+const abonnes = new Set();
+function previens(maj, auteur){
+  const ligne = `data: ${JSON.stringify({ maj, auteur })}\n\n`;
+  for(const res of [...abonnes]){
+    try{ res.write(ligne); }catch{ abonnes.delete(res); }
+  }
+}
+const quiEcrit = req => String(req.headers['x-smacpub-qui'] || '').slice(0, 40);
 
 const json = (res, code, obj) => {
   const corps = JSON.stringify(obj);
@@ -350,6 +378,28 @@ async function poigne(req, res){
                             phonetique: !!d.reglages.phonetique });
   }
 
+  if(p === '/flux'){
+    if(req.method !== 'GET') return json(res, 405, { ok:false, raison:'méthode' });
+    res.writeHead(200, { ...OUVERT, 'content-type':'text/event-stream; charset=utf-8',
+                         'cache-control':'no-store', 'connection':'keep-alive',
+                         // Un intermédiaire qui met en tampon garderait les
+                         // lignes pour lui : ce flux n'a d'intérêt qu'immédiat.
+                         'x-accel-buffering':'no' });
+    res.write(': bonjour\n\n');
+    abonnes.add(res);
+    // Un battement régulier : sans trafic, un navigateur ou un intermédiaire
+    // ferme une connexion tranquille, et personne ne saurait qu'elle est
+    // morte. Le « : » en fait un commentaire, donc rien à traiter côté page.
+    const battement = setInterval(() => {
+      try{ res.write(': bat\n\n'); }catch{ clearInterval(battement); abonnes.delete(res); }
+    }, 25000);
+    const fini = () => { clearInterval(battement); abonnes.delete(res); };
+    req.on('close', fini);
+    req.on('error', fini);
+    res.on('error', fini);
+    return;
+  }
+
   if(p === '/donnees'){
     if(req.method === 'GET'){
       const d = await litDonnees();
@@ -368,8 +418,12 @@ async function poigne(req, res){
         return json(res, 400, { ok:false, raison:'il manque « etats »' });
       try{
         const d = await ecritDonnees(recu);
-        if(d.change) console.log(`  ${new Date().toTimeString().slice(0,8)}  reçu `
-          + `${d.livres.length} livre(s), ${Object.keys(d.retires).length} retiré(s)`);
+        if(d.change){
+          console.log(`  ${new Date().toTimeString().slice(0,8)}  reçu `
+            + `${d.livres.length} livre(s), ${Object.keys(d.retires).length} retiré(s)`
+            + (abonnes.size ? `  → ${abonnes.size} page(s) prévenue(s)` : ''));
+          previens(d.maj, quiEcrit(req));
+        }
         return json(res, 200, { ok:true, maj:d.maj, change:d.change, livres:d.livres.length });
       }catch(err){ return json(res, 500, { ok:false, raison:err.message }); }
     }
@@ -419,6 +473,9 @@ async function poigne(req, res){
         const n = await recoitFichier(req, BIBLIO, id, MAX_LIVRE);
         console.log(`  ${new Date().toTimeString().slice(0,8)}  livre ${id} `
           + `(${Math.round(n / 1048576)} Mo)`);
+        // Un livre qui arrive, c'est un livre que l'autre appareil peut
+        // maintenant ouvrir : il a le droit de l'apprendre tout de suite.
+        previens(Date.now(), quiEcrit(req));
         return json(res, 200, { ok:true, id, octets:n });
       }catch(err){ return json(res, err.message === 'trop gros' ? 413 : 500,
                                { ok:false, raison:err.message }); }
@@ -459,6 +516,7 @@ async function poigne(req, res){
         for(const vieux of (await surDisque(COUVS)).keys())
           if(vieux !== nom && (vieux === base || vieux.startsWith(base + '-') || vieux.startsWith(base + '.')))
             await unlink(join(COUVS, vieux)).catch(() => {});
+        previens(Date.now(), quiEcrit(req));
         return json(res, 200, { ok:true, fichier:nom, octets:n });
       }catch(err){ return json(res, err.message === 'trop gros' ? 413 : 500,
                                { ok:false, raison:err.message }); }
@@ -524,6 +582,7 @@ serveur.listen(PORT, '0.0.0.0', async () => {
   console.log(`  livres     ${BIBLIO}  (${livres.size} fichier(s), ${mo.toFixed(0)} Mo)`);
   console.log(`  couvertures ${COUVS}  (${couvs.size})`);
   console.log(`  copies     ${COPIES}  (${GARDE} dernières)`);
+  console.log('  flux       /flux — les pages ouvertes sont prévenues sans rien demander');
   console.log(`  Phonétique ${d.reglages.phonetique || '— (à régler dans l’appli)'}`);
 
   const dc = dossierCert();

@@ -42,6 +42,7 @@
     <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
     <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
     <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/></symbol>
+    <symbol id="i-cloud-off" viewBox="0 0 24 24"><path d="M3 3l18 18"/><path d="M8.5 7.2A5 5 0 0 1 17 10h.5a3.5 3.5 0 0 1 2.6 5.8"/><path d="M15.5 18H6.5a3.5 3.5 0 0 1-.6-6.95"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/></symbol>
     <symbol id="i-restart" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
     <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></symbol>
@@ -62,6 +63,7 @@
           <input id="lib-search" type="search" placeholder="Titre, auteur…" autocomplete="off" aria-label="Rechercher dans la bibliothèque">
         </label>
         <button class="btn primary" id="add-btn" title="Ajouter des EPUB"><svg class="icon"><use href="#i-plus"/></svg><span>Ajouter</span></button>
+        <button class="icon-btn" id="sync-btn" data-etat="neuf" title="Synchroniser avec le PC" aria-label="Synchroniser avec le PC" hidden><svg class="icon"><use href="#i-restart"/></svg><span class="sync-n" hidden></span></button>
         <button class="icon-btn" id="settings-btn" title="Paramètres"><svg class="icon"><use href="#i-settings"/></svg></button>
       </div>
     </header>

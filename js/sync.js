@@ -37,6 +37,15 @@ const Sync = {
   couvertures: new Set(),
   manquants: new Set(), // les livres dont CET APPAREIL n'a que la fiche
   envoi: null,          // dépôt de fichiers en cours
+  /* Le nom de cette page, tiré au sort à son ouverture. Il part avec chaque
+     envoi pour que le serveur sache qui écrit, et que la page qui écrit ne se
+     réveille pas sur sa propre écriture. */
+  moi: Math.random().toString(36).slice(2, 10),
+  maj: 0,               // la date du catalogue du PC, telle qu'on l'a vue
+  etat: "neuf",         // neuf · travail · ok · souci · absent
+  quand: 0,             // la dernière synchro réussie
+  es: null,             // le fil ouvert vers le serveur
+  essais: 0,
 
   /* L'adresse. Servie DEPUIS le serveur, l'appli n'a rien à régler : elle
    * parle à l'endroit d'où elle vient. C'est le cas courant, et il ne mérite
@@ -71,9 +80,44 @@ const Sync = {
 
   dit(texte, ennui) {
     const el = document.getElementById("srv-line");
-    if (!el) return;
-    el.textContent = texte || "";
-    el.classList.toggle("warn", !!ennui);
+    if (el) {
+      el.textContent = texte || "";
+      el.classList.toggle("warn", !!ennui);
+    }
+  },
+
+  /* LE BOUTON DE LA BARRE DU HAUT. Il dit trois choses et pas une de plus :
+     une coche quand les deux machines sont d'accord, une roue quand on parle
+     au PC, un point d'exclamation quand il ne répond pas. Et on peut appuyer
+     dessus — c'est le seul moment où une synchro doit rendre des comptes à
+     voix haute, puisque c'est le seul moment où on l'a demandée. */
+  montre(etat, pourquoi) {
+    if (etat) this.etat = etat;
+    const b = document.getElementById("sync-btn");
+    if (!b) return;
+    const quand = this.quand
+      ? new Date(this.quand).toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" })
+      : "";
+    const mots = {
+      neuf:    ["#i-restart", "Synchroniser avec le PC"],
+      travail: ["#i-restart", "Je parle au PC…"],
+      ok:      ["#i-check", quand ? `À jour avec le PC — ${quand}` : "À jour avec le PC"],
+      souci:   ["#i-cloud-off", pourquoi || "Le PC ne répond pas"],
+      absent:  ["#i-cloud-off", "Aucun serveur : tout reste dans ce navigateur"],
+    }[this.etat] || ["#i-restart", ""];
+    const n = this.manquants.size;
+    const suite = { ok: (n ? "\n" + plural(n, "livre est encore sur le PC ; il descendra à son ouverture.",
+                                            "livres sont encore sur le PC ; ils descendront à leur ouverture.") : "")
+                        + "\nAppuyez pour synchroniser maintenant.",
+                    souci: "\nAppuyez pour réessayer.",
+                    travail: "", neuf: "", absent: "" }[this.etat] || "";
+    b.hidden = false;
+    b.dataset.etat = this.etat;
+    b.title = mots[1] + suite;
+    b.setAttribute("aria-label", mots[1]);
+    b.querySelector("use").setAttribute("href", mots[0]);
+    const p = b.querySelector(".sync-n");
+    if (p) { p.textContent = n ? n : ""; p.hidden = !n; }
   },
 
   /* Y a-t-il un serveur au bout ? On le demande avant de se plaindre : sur
@@ -93,7 +137,8 @@ const Sync = {
 
   async sync(manuel) {
     const base = this.adresse();
-    if (!base) { if (manuel) this.dit("Aucune adresse : le serveur est désactivé.", true); return false; }
+    if (!base) { if (manuel) this.dit("Aucune adresse : le serveur est désactivé.", true);
+                 this.montre("absent"); return false; }
     /* Un appui pendant une synchro déjà partie ne doit pas être avalé en
      * silence : on adopte l'appui, et celle qui est en l'air rendra des
      * comptes comme si on l'avait demandée. */
@@ -101,6 +146,7 @@ const Sync = {
     this.busy = true;
     this.dire = !!manuel;
     if (this.dire) this.dit("Je parle au PC…");
+    this.montre("travail");
     try {
       const r = await this.fetch(base + "/donnees", { ms: 8000, cache: "no-store" });
       if (!r.ok) throw new Error("le PC a répondu " + r.status);
@@ -110,11 +156,27 @@ const Sync = {
 
       const local = await this.fusionner(dist);
 
-      const envoi = await this.fetch(base + "/donnees", {
-        ms: 20000, method: "PUT", headers: { "content-type": "application/json" },
-        body: JSON.stringify(local),
-      });
-      if (!envoi.ok) throw new Error("envoi refusé (" + envoi.status + ")");
+      /* RIEN À DIRE, DONC ON SE TAIT. Le cas courant d'une synchro, c'est
+         celle qu'on n'a pas demandée : le PC a prévenu, on a relu, et on n'a
+         rien à ajouter. Renvoyer quand même le catalogue identique, c'est une
+         requête et un pâté de JSON pour rien — et comme on vient de ranger
+         les deux côtés de la même façon (`canon`), « identique » se voit
+         maintenant d'un coup d'œil. */
+      const aDire = JSON.stringify([local.livres, local.etats, local.retires])
+                 !== JSON.stringify([dist.livres, dist.etats, dist.retires]);
+      this.maj = dist.maj || this.maj;
+      if (aDire) {
+        const envoi = await this.fetch(base + "/donnees", {
+          ms: 20000, method: "PUT",
+          headers: { "content-type": "application/json", "x-smacpub-qui": this.moi },
+          body: JSON.stringify(local),
+        });
+        if (!envoi.ok) throw new Error("envoi refusé (" + envoi.status + ")");
+        const dit = await envoi.json().catch(() => null);
+        // La date du catalogue, pour que la veille sache reconnaître un
+        // changement qui n'est pas de nous.
+        this.maj = (dit && dit.maj) || this.maj;
+      }
 
       try {
         const c = await this.fetch(base + "/couvertures", { ms: 5000, cache: "no-store" });
@@ -122,7 +184,10 @@ const Sync = {
       } catch { /* sans la liste, on redéposera : ce n'est pas grave */ }
 
       await Library.refresh();
+      this.quand = Date.now();
       this.dit("À jour avec le PC — " + new Date().toLocaleTimeString("fr-CA", { hour: "2-digit", minute: "2-digit" }));
+      this.montre("ok");
+      this.flux();               // et on reste au bout du fil
       this.pousser();            // les fichiers suivent, en arrière-plan
       return true;
     } catch (err) {
@@ -130,16 +195,89 @@ const Sync = {
        * que si on l'a demandé. */
       if (this.dire) this.dit("Le PC ne répond pas — " + this.pourquoi(err), true);
       else this.dit("");
+      this.montre("souci", "Le PC ne répond pas — " + this.pourquoi(err));
       return false;
     } finally { this.busy = false; this.dire = false; }
   },
 
-  /* Après une modification : sans précipitation, une page tournée ne vaut pas
-   * un aller-retour réseau. */
-  bientot() {
+  /* Après une modification. Deux secondes, pas plus : on tourne une page, on
+   * pose le livre, on prend l'autre appareil — le temps de traverser la
+   * pièce, c'est déjà monté. Mais pas zéro non plus : tourner dix pages
+   * d'affilée ne vaut pas dix aller-retours, et le minuteur qu'on remet à
+   * zéro à chaque fois s'en occupe.
+   *
+   * `muet` dans `DB.prevenir` est l'autre moitié de cette mécanique : sans
+   * lui, la synchro se réveillerait sur ce qu'elle vient elle-même d'écrire. */
+  bientot(ms = 2000) {
     if (!this.adresse()) return;
     clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.sync(false), 5000);
+    this.timer = setTimeout(() => this.sync(false), ms);
+  },
+
+  /* ── rester au courant ───────────────────────────────────────────── */
+
+  /* LE FIL. Le serveur garde cette page au bout d'un `EventSource` et lui dit
+   * « le catalogue a changé » à l'instant où il change : l'autre appareil n'a
+   * donc rien à demander, et rien à attendre. Si le fil casse — le PC
+   * redémarre, le Wi-Fi tombe — on le renoue, en espaçant les tentatives
+   * plutôt qu'en s'acharnant. */
+  flux() {
+    const base = this.adresse();
+    if (this.es || !base || typeof EventSource === "undefined") return;
+    let es;
+    try { es = new EventSource(base + "/flux"); } catch { return; }
+    this.es = es;
+    es.onopen = () => { this.essais = 0; };
+    es.onmessage = (e) => {
+      let d = null;
+      try { d = JSON.parse(e.data); } catch { return; }
+      // Celui qui vient d'écrire n'a rien à relire : il sait déjà.
+      if (!d || d.auteur === this.moi) return;
+      this.maj = d.maj || this.maj;
+      this.bientot(250);          // le temps de laisser passer une rafale
+    };
+    es.onerror = () => {
+      es.close();
+      if (this.es === es) this.es = null;
+      const attente = Math.min(60000, 2000 * Math.pow(2, this.essais++));
+      setTimeout(() => this.flux(), attente);
+    };
+  },
+
+  /* LA VEILLE, et c'est une ceinture, pas une bretelle. Un `EventSource` peut
+   * mourir sans le dire — un portable qui sort de veille, un intermédiaire qui
+   * coupe. On demande donc de temps en temps au PC la date de son catalogue :
+   * c'est deux cents octets, et ça ne coûte rien quand la page est cachée,
+   * puisqu'on ne demande pas. */
+  veille() {
+    setInterval(async () => {
+      if (document.visibilityState !== "visible" || this.busy || !this.adresse()) return;
+      if (this.es && this.es.readyState === 1) {
+        // Le fil est vivant : rien à demander. On vérifie quand même une fois
+        // de temps en temps que le PC est toujours là, sinon le bouton
+        // mentirait longtemps.
+        return;
+      }
+      try {
+        const r = await this.fetch(this.adresse() + "/health", { ms: 3000, cache: "no-store" });
+        if (!r.ok) return;
+        const d = await r.json();
+        if (d && d.app === "smacpub" && (d.maj || 0) !== this.maj) this.sync(false);
+      } catch { /* le PC n'est pas là : on réessaiera */ }
+    }, 30000);
+
+    /* Revenir sur l'appli, c'est très souvent arriver du autre appareil. */
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "visible") {
+        // On s'en va : ce qui attendait part MAINTENANT, pas dans deux
+        // secondes — l'autre appareil est peut-être déjà dans l'autre main.
+        if (this.timer) { clearTimeout(this.timer); this.timer = null; this.sync(false); }
+        return;
+      }
+      this.flux();
+      this.sync(false);
+    });
+    window.addEventListener("online", () => { this.flux(); this.sync(false); });
   },
 
   async fusionner(dist) {
@@ -172,12 +310,12 @@ const Sync = {
           locB.delete(id);
           if (Library.covers.has(id)) { URL.revokeObjectURL(Library.covers.get(id)); Library.covers.delete(id); }
         }
-        await DB.put("state", { id, retire: mort });
+        await DB.put("state", { id, retire: mort }, undefined, true);
         locS.set(id, { id, retire: mort });
         continue;
       }
       // Rajouté depuis : la pierre tombale est périmée.
-      if (mort) { delete retires[id]; const s = locS.get(id); if (s && s.retire) { delete s.retire; await DB.put("state", s); } }
+      if (mort) { delete retires[id]; const s = locS.get(id); if (s && s.retire) { delete s.retire; await DB.put("state", s, undefined, true); } }
 
       if (!l) continue;                     // il n'est que chez nous : on l'enverra
       if (!b) {
@@ -188,7 +326,7 @@ const Sync = {
          * bibliothèque tout de suite. */
         const fiche = { ...l };
         delete fiche.cover;
-        await DB.put("books", fiche);
+        await DB.put("books", fiche, undefined, true);
         locB.set(id, fiche);
         if (l.couverture) aCouvrir.push([id, l.couverture]);
       } else if (l.couverture && (l.coverAt || 0) > (b.coverAt || 0)) {
@@ -203,7 +341,7 @@ const Sync = {
       if (retires[id]) continue;
       const cur = locS.get(id) || { id };
       const fusion = mergeState(cur, inc);
-      await DB.put("state", fusion);
+      await DB.put("state", fusion, undefined, true);
       locS.set(id, fusion);
     }
 
@@ -213,16 +351,22 @@ const Sync = {
     // elles ont leur route, et le catalogue ne porte que leurs noms.
     const livres = [...locB.values()].filter((b) => !retires[b.id]).map((b) => {
       const { cover, ...reste } = b;
-      return { ...reste, coverAt: b.coverAt || b.addedAt || 0,
-               couverture: b.cover ? nomCouverture(b) : (b.couverture || "") };
-    });
-    const etats = [...locS.values()].filter((s) => !s.retire && Object.keys(s).length > 1);
+      return canon({ ...reste, coverAt: b.coverAt || b.addedAt || 0,
+                     couverture: b.cover ? nomCouverture(b) : (b.couverture || "") });
+    }).sort(parId);
+    const etats = [...locS.values()]
+      .filter((s) => !s.retire && Object.keys(s).length > 1)
+      .map(canon).filter((s) => Object.keys(s).length > 1).sort(parId);
     /* Ce qui n'est ici qu'une fiche. C'est l'état normal d'un livre ajouté sur
        l'autre machine, et c'est ce que l'étagère signale par « ↓ PC » : le
        titre et la couverture sont là, le fichier descendra à l'ouverture. */
     const aNous = new Set(await DB.keys("files"));
     this.manquants = new Set(livres.filter((b) => !aNous.has(b.id)).map((b) => b.id));
-    return { livres, etats, retires };
+    // Les pierres tombales aussi sont rangées : l'ordre des clés d'un objet
+    // change son écriture, et c'est son écriture que le PC compare.
+    const tombes = {};
+    for (const id of Object.keys(retires).sort()) tombes[id] = retires[id];
+    return { livres, etats, retires: tombes };
   },
 
   async prendreCouverture(id, nom) {
@@ -234,7 +378,7 @@ const Sync = {
       const book = await DB.get("books", id);
       if (!book) return;
       const coverAt = Number((nom.match(/-([a-z0-9]+)\.\w+$/i) || [])[1] ? parseInt((nom.match(/-([a-z0-9]+)\.\w+$/i) || [])[1], 36) : 0) || book.addedAt || Date.now();
-      await DB.put("books", { ...book, cover: blob, couverture: nom, coverAt });
+      await DB.put("books", { ...book, cover: blob, couverture: nom, coverAt }, undefined, true);
       if (Library.covers.has(id)) { URL.revokeObjectURL(Library.covers.get(id)); Library.covers.delete(id); }
     } catch { /* on retentera à la prochaine synchro */ }
   },
@@ -258,7 +402,8 @@ const Sync = {
             try {
               const image = await versImageServable(b.cover);
               const r = await this.fetch(base + "/couvertures/" + nom, {
-                ms: 30000, method: "PUT", headers: { "content-type": image.type }, body: image,
+                ms: 30000, method: "PUT",
+                headers: { "content-type": image.type, "x-smacpub-qui": this.moi }, body: image,
               });
               if (r.ok) { this.couvertures.add(nom); images++; }
             } catch { /* tant pis, la prochaine fois */ }
@@ -270,7 +415,8 @@ const Sync = {
         try {
           const r = await this.fetch(base + "/livres/" + b.id, {
             ms: 10 * 60 * 1000, method: "PUT",
-            headers: { "content-type": "application/octet-stream" }, body: file,
+            headers: { "content-type": "application/octet-stream", "x-smacpub-qui": this.moi },
+            body: file,
           });
           if (r.ok) { this.fichiers.add(b.id); this.manquants.delete(b.id); fichiers++; }
         } catch { /* un livre trop gros ou une coupure : on retentera */ }
@@ -280,6 +426,7 @@ const Sync = {
           + `${fichiers && images ? ", " : ""}${images ? plural(images, "couverture", "couvertures") : ""}`);
         await Library.refresh();
       }
+      this.montre();
     })().finally(() => { this.envoi = null; });
     return this.envoi;
   },
@@ -295,9 +442,10 @@ const Sync = {
       const r = await this.fetch(base + "/livres/" + id, { ms: 10 * 60 * 1000 });
       if (!r.ok) throw new Error("le PC a répondu " + r.status);
       const blob = await r.blob();
-      await DB.put("files", blob, id);
+      await DB.put("files", blob, id, true);
       this.manquants.delete(id);
       Library.render();
+      this.montre();
       if (avance) avance.close();
       return blob;
     } catch (err) {
@@ -363,6 +511,36 @@ const Sync = {
     } catch { return null; }
   },
 };
+
+/* UN MÊME SENS DOIT S'ÉCRIRE D'UNE SEULE FAÇON, et c'est tout sauf un détail
+ * d'esthétique.
+ *
+ * Le PC compare le catalogue qu'il reçoit à celui qu'il garde — en TEXTE,
+ * parce que c'est la seule comparaison qui ne se trompe pas sur ce qu'il
+ * écrira. Deux appareils d'accord sur le fond mais pas sur la forme — une clé
+ * de plus qui ne veut rien dire (`bookmarks: []`, `finished: false`), les
+ * mêmes clés dans un autre ordre, les mêmes livres dans un autre ordre — lui
+ * paraissent donc en désaccord. Et comme il prévient les pages à chaque
+ * changement, le désaccord tourne en rond : il prévient, l'autre relit,
+ * réécrit à sa façon, il prévient à nouveau. Mesuré avant correction : un
+ * seul tour de page déclenchait huit envois.
+ *
+ * On range donc avant d'envoyer : les clés en ordre, les tableaux en ordre, et
+ * RIEN de ce qui ne veut rien dire. Tout ce que l'appli lit, elle le lit déjà
+ * avec un repli (`s.progress || 0`, `s.finished ? …`) : une clé absente et une
+ * clé à zéro sont la même chose pour elle. */
+function canon(o) {
+  const out = {};
+  for (const k of Object.keys(o).sort()) {
+    const v = o[k];
+    if (!v) continue;                                   // 0, "", false, null, undefined
+    if (Array.isArray(v) && !v.length) continue;
+    if (typeof v === "object" && !Array.isArray(v) && !Object.keys(v).length) continue;
+    out[k] = v;
+  }
+  return out;
+}
+const parId = (a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
 /* Le nom d'une couverture porte la date du choix : `<id>-<date>.jpg`. Changer
  * la couverture change donc le NOM, et c'est ce qui fait que l'autre machine
